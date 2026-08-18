@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Env files — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# OS / editor cruft
+.DS_Store
+*.pem
+npm-debug.log*

@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+
+html {
+  @apply bg-paper;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-paper text-ink font-body;
+}
+
+/* Odometer-style number treatment — the app's signature element.
+   Used for KM totals so stats read like a real vehicle odometer. */
+.odometer {
+  @apply font-display tabular-nums tracking-tight;
+}
+
+/* Consistent, on-brand focus ring everywhere instead of each browser's
+   default blue outline, which clashed with the palette. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-paper;
+}
+
+::selection {
+  @apply bg-brandLight/40;
+}
