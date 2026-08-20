@@ -30,21 +30,25 @@ export async function createVehicle(prevState: ActionState, formData: FormData):
     return { error: "RUC purchased-to reading must be a valid number." };
   }
 
-  const { error } = await supabase.from("vehicles").insert({
-    name: name.trim(),
-    registration: registration.trim(),
-    make,
-    model,
-    current_odometer: odometer,
-    ruc_purchased_to_km: ruc,
-  });
+  const { data: newVehicle, error } = await supabase
+    .from("vehicles")
+    .insert({
+      name: name.trim(),
+      registration: registration.trim(),
+      make,
+      model,
+      current_odometer: odometer,
+      ruc_purchased_to_km: ruc,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !newVehicle) {
     return { error: "Something went wrong adding this vehicle. Please try again." };
   }
 
   revalidatePath("/admin/vehicles");
-  redirect("/admin/vehicles?success=Vehicle added");
+  redirect(`/admin/vehicles/${newVehicle.id}/qr?success=${encodeURIComponent("Vehicle added. Here's its QR code.")}`);
 }
 
 export async function updateVehicle(vehicleId: string, prevState: ActionState, formData: FormData): Promise<ActionState> {

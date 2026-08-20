@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import QRCode from "qrcode";
+import Link from "next/link";
 import QrCardActions from "./QrCardActions";
+import SuccessBanner from "@/components/SuccessBanner";
 
 export default async function VehicleQrPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -16,6 +18,7 @@ export default async function VehicleQrPage({ params }: { params: { id: string }
 
   return (
     <div className="mx-auto max-w-sm">
+      <SuccessBanner />
       <div className="rounded-2xl border-2 border-ink bg-white p-6 text-center print:border print:shadow-none">
         <p className="font-display text-sm font-bold uppercase tracking-widest text-steel">Fleet Tracker</p>
         <h1 className="mt-2 font-display text-2xl font-bold text-ink">{vehicle.name}</h1>
@@ -29,7 +32,14 @@ export default async function VehicleQrPage({ params }: { params: { id: string }
         </p>
       </div>
 
-      <QrCardActions qrDataUrl={qrDataUrl} vehicleName={vehicle.name} />
+      <QrCardActions qrDataUrl={qrDataUrl} vehicleName={vehicle.name} registration={vehicle.registration} />
+
+      <Link
+        href="/admin/vehicles"
+        className="mt-4 block text-center text-sm font-semibold text-ink print:hidden"
+      >
+        Done, back to vehicles
+      </Link>
 
       <p className="mt-4 text-center text-xs text-steel print:hidden">
         This QR points to {scanUrl}. If your site URL changes (e.g. after deploying), update
