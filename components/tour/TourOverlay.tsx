@@ -3,6 +3,30 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TourStep } from "./tourSteps";
 
+// Some nav items now render twice in the DOM at once with the same
+// data-tour id — a desktop sidebar copy and a mobile tab-bar copy, one of
+// them hidden via CSS depending on viewport width. querySelector alone
+// would happily return the hidden one (display:none doesn't remove it
+// from the DOM), giving a zero-size rect. offsetParent is null for any
+// element that's display:none (or has a display:none ancestor), so this
+// picks the first match that's actually rendered.
+function findVisibleTarget(selectors: string | string[]): HTMLElement | null {
+  const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+  // Try each selector in order (e.g. an admin sidebar item, then the
+  // mobile "More" tab it falls back to) — first one with an actually
+  // visible match wins, so a desktop-only element doesn't block the
+  // mobile fallback from ever being tried.
+  for (const selector of selectorList) {
+    const candidates = document.querySelectorAll<HTMLElement>(selector);
+    for (const el of Array.from(candidates)) {
+      if (el.offsetParent !== null) return el;
+    }
+  }
+  // Nothing visible anywhere — fall back to the first match of the first
+  // selector, if any, same as the old querySelector behaviour.
+  return document.querySelector<HTMLElement>(selectorList[0]) ?? null;
+}
+
 type Rect = { top: number; left: number; width: number; height: number };
 
 const PAD = 8;
@@ -47,7 +71,7 @@ export default function TourOverlay({
 
     const tryFind = () => {
       if (cancelled) return;
-      const el = document.querySelector(step.target!);
+      const el = findVisibleTarget(step.target!);
       if (el) {
         el.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
         setReady(true);
@@ -73,7 +97,7 @@ export default function TourOverlay({
     if (!ready || !step.target) return;
 
     const update = () => {
-      const el = document.querySelector(step.target!);
+      const el = findVisibleTarget(step.target!);
       if (!el) {
         setRect(null);
         return;

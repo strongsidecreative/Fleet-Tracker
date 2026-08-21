@@ -2,10 +2,14 @@ export type TourStep = {
   /** Unique id, used for keys only. */
   id: string;
   /**
-   * CSS selector for the element to spotlight, e.g. `[data-tour="nav-home"]`.
-   * Leave undefined for a centered welcome/finish slide with no spotlight.
+   * CSS selector(s) for the element to spotlight, e.g.
+   * `[data-tour="nav-home"]`. Pass an array to try candidates in order and
+   * spotlight the first one actually visible — used for admin items that
+   * only render inside the sidebar on desktop, but need a fallback (the
+   * "More" tab) on mobile where they're tucked behind it. Leave undefined
+   * for a centered welcome/finish slide with no spotlight.
    */
-  target?: string;
+  target?: string | string[];
   /**
    * Route this step's target lives on. If the tour is on a different page
    * when this step is reached, the tour engine will navigate there first.
@@ -148,17 +152,17 @@ export const adminTourSteps: TourStep[] = [
   {
     id: "nav-mytrips",
     path: "/admin",
-    target: "[data-tour='nav-admin-mytrips']",
+    target: ["[data-tour='nav-admin-mytrips']", "[data-tour='nav-admin-more']"],
     title: "My Trips",
-    content: "Your own trip history, separate from the fleet-wide records further down.",
+    content: "Your own trip history, separate from the fleet-wide records further down. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-people",
     path: "/admin",
-    target: "[data-tour='nav-admin-people']",
+    target: ["[data-tour='nav-admin-people']", "[data-tour='nav-admin-more']"],
     title: "People",
-    content: "Manage drivers and admins from one place — switch between the two with the toggle at the top, add new people, and update driver licence details.",
+    content: "Manage drivers and admins from one place — switch between the two with the toggle at the top, add new people, and update driver licence details. On mobile, find it under More.",
     placement: "auto",
   },
   {
@@ -172,57 +176,57 @@ export const adminTourSteps: TourStep[] = [
   {
     id: "nav-incidents",
     path: "/admin",
-    target: "[data-tour='nav-admin-incidents']",
+    target: ["[data-tour='nav-admin-incidents']", "[data-tour='nav-admin-more']"],
     title: "Incidents",
-    content: "Review incidents drivers have reported — damage, breakdowns, or anything else worth flagging.",
+    content: "Review incidents drivers have reported — damage, breakdowns, or anything else worth flagging. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-checks",
     path: "/admin",
-    target: "[data-tour='nav-admin-checks']",
+    target: ["[data-tour='nav-admin-checks']", "[data-tour='nav-admin-more']"],
     title: "Vehicle Checks",
-    content: "See the pre-trip vehicle checks drivers have submitted, and drill into any that need follow-up.",
+    content: "See the pre-trip vehicle checks drivers have submitted, and drill into any that need follow-up. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-reports",
     path: "/admin",
-    target: "[data-tour='nav-admin-reports']",
+    target: ["[data-tour='nav-admin-reports']", "[data-tour='nav-admin-more']"],
     title: "Reports",
-    content: "Generate weekly, monthly, or custom-range reports on fleet usage, and export them.",
+    content: "Generate weekly, monthly, or custom-range reports on fleet usage, and export them. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-records",
     path: "/admin",
-    target: "[data-tour='nav-admin-records']",
+    target: ["[data-tour='nav-admin-records']", "[data-tour='nav-admin-more']"],
     title: "Records",
-    content: "A searchable log of every trip across the whole fleet, exportable to CSV. Any vehicle still checked out shows at the top so you can close it out.",
+    content: "A searchable log of every trip across the whole fleet, exportable to CSV. Any vehicle still checked out shows at the top so you can close it out. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-audit",
     path: "/admin",
-    target: "[data-tour='nav-admin-audit']",
+    target: ["[data-tour='nav-admin-audit']", "[data-tour='nav-admin-more']"],
     title: "Audit",
-    content: "A record of key changes made in the system, for accountability and troubleshooting.",
+    content: "A record of key changes made in the system, for accountability and troubleshooting. On mobile, find it under More.",
     placement: "auto",
   },
   {
     id: "nav-notifications",
     path: "/admin",
-    target: "[data-tour='nav-admin-notifications']",
+    target: ["[data-tour='nav-admin-notifications']", "[data-tour='nav-admin-more']"],
     title: "Notifications",
-    content: "Alerts that need your attention — new bookings, overdue vehicles, and more.",
+    content: "Alerts that need your attention — new bookings, overdue vehicles, and more. On mobile, a small dot on the More tab shows when something's unread.",
     placement: "auto",
   },
   {
     id: "nav-account",
     path: "/admin",
-    target: "[data-tour='nav-admin-account']",
+    target: ["[data-tour='nav-admin-account']", "[data-tour='nav-admin-more']"],
     title: "Account",
-    content: "Your admin profile and settings. You can also replay this tour any time from this page.",
+    content: "Your admin profile and settings. You can also replay this tour any time from this page. On mobile, find it under More.",
     placement: "auto",
   },
   {
