@@ -4,19 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/vehicles", label: "Vehicles" },
-  { href: "/admin/drivers", label: "Drivers" },
-  { href: "/admin/admins", label: "Admins" },
-  { href: "/admin/bookings", label: "Bookings" },
-  { href: "/admin/incidents", label: "Incidents" },
-  { href: "/admin/vehicle-checks", label: "Checks" },
-  { href: "/admin/reports", label: "Reports" },
-  { href: "/admin/records", label: "Records" },
-  { href: "/admin/sessions", label: "Sessions" },
-  { href: "/admin/audit", label: "Audit" },
-  { href: "/admin/notifications", label: "Notifications" },
-  { href: "/admin/account", label: "Account" },
+  { href: "/admin", label: "Dashboard", tourId: "nav-admin-dashboard" },
+  { href: "/admin/vehicles", label: "Vehicles", tourId: "nav-admin-vehicles" },
+  { href: "/admin/drivers", label: "Drivers", tourId: "nav-admin-drivers" },
+  { href: "/admin/admins", label: "Admins", tourId: "nav-admin-admins" },
+  { href: "/admin/bookings", label: "Bookings", tourId: "nav-admin-bookings" },
+  { href: "/admin/incidents", label: "Incidents", tourId: "nav-admin-incidents" },
+  { href: "/admin/vehicle-checks", label: "Checks", tourId: "nav-admin-checks" },
+  { href: "/admin/reports", label: "Reports", tourId: "nav-admin-reports" },
+  { href: "/admin/records", label: "Records", tourId: "nav-admin-records" },
+  { href: "/admin/sessions", label: "Sessions", tourId: "nav-admin-sessions" },
+  { href: "/admin/audit", label: "Audit", tourId: "nav-admin-audit" },
+  { href: "/admin/notifications", label: "Notifications", tourId: "nav-admin-notifications" },
+  { href: "/admin/account", label: "Account", tourId: "nav-admin-account" },
 ];
 
 export default function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
@@ -41,6 +41,7 @@ export default function AdminNav({ pendingCount = 0 }: { pendingCount?: number }
             <li key={item.href}>
               <Link
                 href={item.href}
+                data-tour={item.tourId}
                 className={`flex items-center justify-between rounded px-3 py-2 text-sm font-medium transition-colors ${
                   active ? "bg-brand text-paper" : "text-paper/80 hover:bg-steel/30"
                 }`}

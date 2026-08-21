@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./LogoutButton";
 import { licenceSeverity, LICENCE_LABEL, LICENCE_BADGE_CLASS } from "@/lib/licenceStatus";
 import PushSubscribeButton from "@/components/PushSubscribeButton";
+import { RestartTourButton } from "@/components/tour/TourLauncher";
+import { driverTourSteps } from "@/components/tour/tourSteps";
 
 export default async function AccountPage() {
   const supabase = createClient();
@@ -24,6 +26,9 @@ export default async function AccountPage() {
   return (
     <div className="space-y-4">
       <h1 className="mb-1 font-display text-xl font-bold text-ink">Account</h1>
+
+      <RestartTourButton steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />
+
       <div className="space-y-3 rounded-xl border border-steel/20 bg-white p-4">
         <div>
           <p className="text-xs text-steel">Name</p>

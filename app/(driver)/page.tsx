@@ -43,7 +43,7 @@ export default async function DriverDashboard() {
       <h1 className="font-display text-2xl font-semibold text-ink">Kia ora, {profile?.name}</h1>
 
       {activeTrip ? (
-        <div className="rounded-2xl border border-amber/40 bg-amber/10 p-4">
+        <div data-tour="driver-scan-card" className="rounded-2xl border border-amber/40 bg-amber/10 p-4">
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber">Current Vehicle</p>
           {activeTrip.vehicle?.photo_url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -66,7 +66,7 @@ export default async function DriverDashboard() {
           </Link>
         </div>
       ) : (
-        <div className="rounded-2xl border border-steel/20 bg-white p-4 text-center">
+        <div data-tour="driver-scan-card" className="rounded-2xl border border-steel/20 bg-white p-4 text-center">
           <p className="mb-3 text-sm text-steel">No vehicle currently in use</p>
           <Link
             href="/scan"
@@ -77,7 +77,7 @@ export default async function DriverDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div data-tour="driver-stats" className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-steel/20 bg-white p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-steel">This Week</p>
           <p className="odometer mt-1 text-2xl font-bold text-ink">{weekKm.toLocaleString("en-NZ")} KM</p>
@@ -119,7 +119,7 @@ export default async function DriverDashboard() {
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div data-tour="driver-quick-actions" className="space-y-2">
         <Link
           href="/bookings/new"
           className="flex items-center justify-center rounded-xl border border-steel/30 bg-white py-3 text-sm font-semibold text-ink"

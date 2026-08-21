@@ -81,7 +81,7 @@ export default async function AdminDashboard() {
         </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div data-tour="admin-stats" className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-steel/20 bg-white p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-steel">Vehicles In Use</p>
           <p className="odometer mt-1 text-2xl font-bold text-ink">
@@ -131,7 +131,7 @@ export default async function AdminDashboard() {
         <WeeklyKmChart data={weeklyChartData} />
       </div>
 
-      <div>
+      <div data-tour="admin-alerts">
         <p className="mb-2 text-sm font-bold text-ink">Vehicle Alerts</p>
         <div className="overflow-hidden rounded-xl border border-steel/20 bg-white">
           {(!vehicles || vehicles.length === 0) && <p className="p-3 text-sm text-steel">No vehicles yet.</p>}

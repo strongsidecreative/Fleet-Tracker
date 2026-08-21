@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { TourProvider } from "@/components/tour/TourContext";
 
 export const metadata: Metadata = {
   title: "Fleet Tracker",
-  description: "Track who's using which family vehicle, and keep everyone accountable.",
+  description: "Track who's using which vehicle, and keep everyone accountable.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <ServiceWorkerRegister />
-        {children}
+        <TourProvider>{children}</TourProvider>
       </body>
     </html>
   );

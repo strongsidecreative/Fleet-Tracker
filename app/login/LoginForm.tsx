@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justSetUp = searchParams.get("setup") === "success";
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
@@ -46,6 +48,12 @@ export default function LoginForm() {
           <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-ink">Fleet</h1>
           <p className="text-xs font-medium uppercase tracking-[0.3em] text-brand">— Tracker —</p>
         </div>
+
+        {justSetUp && (
+          <p className="mb-4 rounded-lg border border-track/40 bg-track/10 px-4 py-3 text-sm font-medium text-track">
+            Organisation created. Log in below to get started.
+          </p>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
