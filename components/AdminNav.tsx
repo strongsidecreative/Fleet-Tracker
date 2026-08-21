@@ -134,13 +134,16 @@ export default function AdminNav({
         </div>
       </nav>
 
-      {/* Mobile: 4 pinned tabs + "More" for everything else, same shape
-          as the driver bottom nav rather than a wrapped wall of buttons. */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-steel/20 bg-ink text-paper md:hidden"
-        aria-label="Admin"
-      >
-        <ul className="flex justify-around">
+      {/* Mobile: header stays on top (same as before), followed by 4
+          pinned tabs + "More" for everything else — a single row instead
+          of the old wrapped wall of 13 buttons. Sits in normal document
+          flow rather than fixed to the bottom. */}
+      <nav className="border-b border-steel/20 bg-ink text-paper md:hidden" aria-label="Admin">
+        <div className="px-4 py-4 font-display text-lg font-bold uppercase tracking-wide">
+          Fleet Tracker
+          <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
+        </div>
+        <ul className="flex justify-around border-t border-steel/20">
           {pinned.map((item) => {
             const active = isActive(item, pathname);
             return (

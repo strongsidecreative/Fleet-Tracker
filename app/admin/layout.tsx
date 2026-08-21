@@ -26,7 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq("read", false);
 
   return (
-    <div className="min-h-screen pb-20 md:flex md:pb-0">
+    <div className="min-h-screen md:flex">
       <TourLauncher steps={adminTourSteps} storageKeyPrefix="ft_tour_admin" />
       <AdminNav pendingCount={distinctRequestCount} unreadCount={unreadCount ?? 0} />
       <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
