@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/admin", label: "Dashboard", tourId: "nav-admin-dashboard" },
+  { href: "/scan", label: "Scan Vehicle", tourId: "nav-admin-scan" },
+  { href: "/trips", label: "My Trips", tourId: "nav-admin-mytrips" },
   { href: "/admin/vehicles", label: "Vehicles", tourId: "nav-admin-vehicles" },
   { href: "/admin/drivers", label: "Drivers", tourId: "nav-admin-drivers" },
   { href: "/admin/admins", label: "Admins", tourId: "nav-admin-admins" },
@@ -18,6 +20,13 @@ const items = [
   { href: "/admin/notifications", label: "Notifications", tourId: "nav-admin-notifications" },
   { href: "/admin/account", label: "Account", tourId: "nav-admin-account" },
 ];
+
+// Items that take the admin out of the /admin section entirely (into the
+// same scan/trip pages drivers use — admins are just drivers too when it
+// comes to logging their own vehicle use). These need an exact pathname
+// match, not startsWith, so "My Trips" doesn't light up while browsing
+// unrelated driver pages that happen to share a prefix.
+const EXACT_MATCH_HREFS = new Set(["/scan", "/trips"]);
 
 export default function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname();
@@ -36,7 +45,9 @@ export default function AdminNav({ pendingCount = 0 }: { pendingCount?: number }
       <ul className="flex flex-wrap gap-1 px-2 pb-3 md:flex-col md:pb-4">
         {items.map((item) => {
           const active =
-            item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+            item.href === "/admin" || EXACT_MATCH_HREFS.has(item.href)
+              ? pathname === item.href
+              : pathname.startsWith(item.href);
           return (
             <li key={item.href}>
               <Link
