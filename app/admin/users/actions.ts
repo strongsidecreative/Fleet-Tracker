@@ -8,4 +8,5 @@ export async function toggleUserActive(userId: string, newActive: boolean) {
   await supabase.from("profiles").update({ active: newActive }).eq("id", userId);
   revalidatePath("/admin/drivers");
   revalidatePath("/admin/admins");
+  revalidatePath("/admin/people");
 }

@@ -44,5 +44,6 @@ export async function upsertLicence(driverId: string, prevState: ActionState, fo
 
   revalidatePath(`/admin/drivers/${driverId}`);
   revalidatePath("/admin/drivers");
+  revalidatePath("/admin/people");
   return { error: null };
 }

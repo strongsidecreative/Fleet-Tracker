@@ -102,9 +102,8 @@ export async function createUser(role: "driver" | "admin", prevState: ActionStat
     return { error };
   }
 
-  revalidatePath("/admin/drivers");
-  revalidatePath("/admin/admins");
-  redirect(role === "admin" ? "/admin/admins?success=Invite sent" : "/admin/drivers?success=Invite sent");
+  revalidatePath("/admin/people");
+  redirect(`/admin/people?role=${role}&success=Invite sent`);
 }
 
 export async function createDriver(prevState: ActionState, formData: FormData): Promise<ActionState> {
@@ -188,11 +187,11 @@ export async function createDrivers(prevState: BulkActionState, formData: FormDa
     if (!error) successCount++;
   }
 
-  revalidatePath("/admin/drivers");
+  revalidatePath("/admin/people");
 
   const allSucceeded = successCount === rowIds.length;
   if (allSucceeded) {
-    redirect(`/admin/drivers?success=${successCount} invite${successCount === 1 ? "" : "s"} sent`);
+    redirect(`/admin/people?role=driver&success=${successCount} invite${successCount === 1 ? "" : "s"} sent`);
   }
 
   // Partial or total failure: stay on the page and report per-row errors so

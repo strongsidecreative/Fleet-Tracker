@@ -243,7 +243,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
   <div class="wrap">
     <div class="eyebrow">Admin Guide</div>
     <h1>Managing the fleet</h1>
-    <p class="lead">Everything a driver can do, plus the full admin navigation: Dashboard, Vehicles, Drivers, Admins, Bookings, Vehicle Checks, Incidents, Reports, Records, Sessions, Audit, Notifications, and Account. This page covers everything an admin needs — including how to install the app.</p>
+    <p class="lead">Everything a driver can do, plus the full admin navigation: Dashboard, Scan Vehicle, My Trips, Vehicles, People, Bookings, Vehicle Checks, Incidents, Reports, Records, Audit, Notifications, and Account. This page covers everything an admin needs — including how to install the app.</p>
   </div>
 </div>
 
@@ -262,7 +262,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
         <p>Add a vehicle, set compliance fields, and generate/print its QR code. Download saves a PNG with the code and registration baked in.</p>
       </div>
       <div class="feature-card">
-        <h4><span class="dot amber"></span>Drivers & Admins</h4>
+        <h4><span class="dot amber"></span>People</h4>
         <p>Invite by email, view licence status and usage totals, deactivate/reactivate (no hard deletes — trip history is always preserved).</p>
       </div>
       <div class="feature-card">
@@ -278,8 +278,8 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
         <p>Weekly/monthly/custom reports and full records, each with a live view and CSV export for bookkeeping.</p>
       </div>
       <div class="feature-card">
-        <h4><span class="dot track"></span>Sessions</h4>
-        <p>See any vehicle currently checked out, with the option to force-close a session if someone forgot to scan out.</p>
+        <h4><span class="dot track"></span>Your Own Trips</h4>
+        <p>Admins are drivers too — Scan Vehicle and My Trips let you check a vehicle in or out and see your own trip history, same as anyone else.</p>
       </div>
       <div class="feature-card">
         <h4><span class="dot amber"></span>Audit & Notifications</h4>
@@ -302,7 +302,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     </details>
     <details>
       <summary>Inviting a driver or admin</summary>
-      <div class="guide-body"><p>Go to Drivers → Add Driver, or Admins → Add Admin, and invite by email. This needs the Supabase service role key configured on the backend — a one-time technical setup step. If invites aren't working, that's the first thing to check with whoever maintains the app.</p></div>
+      <div class="guide-body"><p>Go to People, switch to the Drivers or Admins tab with the toggle at the top, then Add Driver or Add Admin and invite by email. This needs the Supabase service role key configured on the backend — a one-time technical setup step. If invites aren't working, that's the first thing to check with whoever maintains the app.</p></div>
     </details>
     <details>
       <summary>Approving or declining a booking</summary>
@@ -318,7 +318,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     </details>
     <details>
       <summary>Force-closing a stuck session</summary>
-      <div class="guide-body"><p>If a driver forgot to scan out, go to Sessions, find the active session for that vehicle, and force-close it. This is the only way to manually end a trip that wasn't finished properly through the QR scan.</p></div>
+      <div class="guide-body"><p>If a driver forgot to scan out, go to Records — any vehicle still marked active shows in an "Open Sessions" section at the top. Find it there and force-close it with the correct ending KM. This is the only way to manually end a trip that wasn't finished properly through the QR scan.</p></div>
     </details>
     <details>
       <summary>Exporting reports and records</summary>
@@ -326,7 +326,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     </details>
     <details>
       <summary>Deactivating a driver or admin</summary>
-      <div class="guide-body"><p>Use Deactivate, not delete — there is no hard delete in Fleet Tracker. A deactivated person can't log in until reactivated, but every trip, booking, and record tied to them is preserved.</p></div>
+      <div class="guide-body"><p>On the People page, use Deactivate, not delete — there is no hard delete in Fleet Tracker. A deactivated person can't log in until reactivated, but every trip, booking, and record tied to them is preserved.</p></div>
     </details>
   </div>
 </section>
@@ -465,7 +465,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
 
     <details open>
       <summary>How do I give someone else admin access?</summary>
-      <p>Go to Admin → Admins → invite by email. This needs the Supabase service role key configured on the backend (a one-time technical setup step) — if invites aren't working, that's the first thing to check with whoever maintains the app.</p>
+      <p>Go to Admin → People → Admins tab → invite by email. This needs the Supabase service role key configured on the backend (a one-time technical setup step) — if invites aren't working, that's the first thing to check with whoever maintains the app.</p>
     </details>
 
     <details>
@@ -480,7 +480,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
 
     <details>
       <summary>A driver forgot to scan out — the vehicle still shows as "in use." How do I fix it?</summary>
-      <p>Go to Sessions, find the active session for that vehicle, and force-close it. This is the only way to manually end a trip that wasn't finished properly through the QR scan.</p>
+      <p>Go to Records — any vehicle still marked active shows in an "Open Sessions" section at the top. Find it there and force-close it. This is the only way to manually end a trip that wasn't finished properly through the QR scan.</p>
     </details>
 
     <details>
@@ -533,7 +533,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
 
     <details>
       <summary>How do I get admin access?</summary>
-      <p>An existing admin needs to invite you from Admin → Admins. If you don't have anyone with admin access yet, that's a setup step to sort out with whoever manages the app.</p>
+      <p>An existing admin needs to invite you from Admin → People → Admins tab. If you don't have anyone with admin access yet, that's a setup step to sort out with whoever manages the app.</p>
     </details>
 
     <details>

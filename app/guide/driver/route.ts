@@ -410,7 +410,7 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
 
     <details>
       <summary>How do I get admin access?</summary>
-      <p>An existing admin needs to invite you from Admin → Admins. If you don't have anyone with admin access yet, that's a setup step to sort out with whoever manages the app.</p>
+      <p>An existing admin needs to invite you from Admin → People → Admins tab. If you don't have anyone with admin access yet, that's a setup step to sort out with whoever manages the app.</p>
     </details>
 
     <details>

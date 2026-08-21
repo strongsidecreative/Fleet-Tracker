@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
@@ -9,7 +10,16 @@ export default async function DriverDashboard() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase.from("profiles").select("name").eq("id", user!.id).single();
+  const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
+
+  // "/" is the PWA's install start_url, so an admin who opens the app
+  // from their home-screen icon (or a stale bookmark, or an
+  // already-active session) lands here directly rather than going
+  // through the login form's role-based redirect. Send them on to the
+  // admin dashboard instead of showing the driver home screen.
+  if (profile?.role === "admin") {
+    redirect("/admin");
+  }
 
   const { data: activeTrip } = await supabase
     .from("vehicle_usage")

@@ -1,5 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import SuccessBanner from "@/components/SuccessBanner";
+import CloseSessionForm from "./CloseSessionForm";
+
+function hoursOpen(start: string) {
+  const ms = Date.now() - new Date(start).getTime();
+  const hours = ms / (1000 * 60 * 60);
+  if (hours < 1) return `${Math.round(hours * 60)} min`;
+  return `${hours.toFixed(1)} hrs`;
+}
 
 export default async function AdminRecordsPage({
   searchParams,
@@ -11,6 +19,17 @@ export default async function AdminRecordsPage({
 
   const { data: drivers } = await supabase.from("profiles").select("id, name").eq("role", "driver").order("name");
   const { data: vehicles } = await supabase.from("vehicles").select("id, name").order("name");
+
+  // Trips still marked active belong at the top of this page, not on a
+  // separate "Sessions" tab — it's the same vehicle_usage table, and an
+  // admin looking at usage records is exactly who needs to notice one
+  // was left open. Always shown regardless of the filters below, so a
+  // stuck session never gets hidden by an unrelated date range.
+  const { data: openSessions } = await supabase
+    .from("vehicle_usage")
+    .select("*, vehicle:vehicles(name), driver:profiles(name)")
+    .eq("status", "active")
+    .order("start_datetime", { ascending: true });
 
   let query = supabase
     .from("vehicle_usage")
@@ -36,6 +55,31 @@ export default async function AdminRecordsPage({
   return (
     <div>
       <SuccessBanner />
+
+      {openSessions && openSessions.length > 0 && (
+        <div className="mb-5">
+          <h2 className="mb-2 font-display text-base font-bold text-ink">
+            Open Sessions <span className="text-sm font-normal text-steel">— still marked active</span>
+          </h2>
+          <div className="space-y-2">
+            {openSessions.map((t) => (
+              <div key={t.id} className="rounded-xl border border-amber/40 bg-amber/10 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium text-ink">{t.vehicle?.name}</p>
+                  <span className="text-xs font-medium text-amber">Open {hoursOpen(t.start_datetime)}</span>
+                </div>
+                <p className="mt-1 text-xs text-steel">
+                  {t.driver?.name} · Started{" "}
+                  {new Date(t.start_datetime).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}{" "}
+                  · Start KM: {t.start_km.toLocaleString("en-NZ")}
+                </p>
+                <CloseSessionForm tripId={t.id} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">Usage Records</h1>
         <a
