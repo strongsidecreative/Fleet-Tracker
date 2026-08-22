@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { FeatureKey } from "@/lib/orgFeatures";
 
-type NavItem = { href: string; label: string; tourId: string; match?: (path: string) => boolean };
+type NavItem = { href: string; label: string; tourId: string; match?: (path: string) => boolean; feature?: FeatureKey };
 
 // Full set, grouped — used as-is for the desktop sidebar (plenty of room,
 // nothing clustered about a vertical list), and re-sliced below into
-// "pinned" + "everything else" for the mobile tab bar.
+// "pinned" + "everything else" for the mobile tab bar. Items with a
+// `feature` key are dropped entirely when that feature is switched off
+// for the current organisation (see the `features` prop below) — nav
+// visibility only, the actual page-level block lives in middleware.ts.
 const groups: { label: string; items: NavItem[] }[] = [
   {
     label: "Overview",
@@ -43,15 +47,15 @@ const groups: { label: string; items: NavItem[] }[] = [
         tourId: "nav-admin-records",
         match: (p) => p.startsWith("/admin/records") || p.startsWith("/admin/sessions"),
       },
-      { href: "/admin/incidents", label: "Incidents", tourId: "nav-admin-incidents" },
-      { href: "/admin/vehicle-checks", label: "Checks", tourId: "nav-admin-checks" },
-      { href: "/admin/reports", label: "Reports", tourId: "nav-admin-reports" },
+      { href: "/admin/incidents", label: "Incidents", tourId: "nav-admin-incidents", feature: "incident_reports" },
+      { href: "/admin/vehicle-checks", label: "Checks", tourId: "nav-admin-checks", feature: "vehicle_checks" },
+      { href: "/admin/reports", label: "Reports", tourId: "nav-admin-reports", feature: "reports" },
     ],
   },
   {
     label: "System",
     items: [
-      { href: "/admin/audit", label: "Audit", tourId: "nav-admin-audit" },
+      { href: "/admin/audit", label: "Audit", tourId: "nav-admin-audit", feature: "audit_log" },
       { href: "/admin/notifications", label: "Notifications", tourId: "nav-admin-notifications" },
       { href: "/admin/account", label: "Account", tourId: "nav-admin-account" },
     ],
@@ -69,9 +73,11 @@ function isActive(item: NavItem, pathname: string) {
 export default function AdminNav({
   pendingCount = 0,
   unreadCount = 0,
+  features,
 }: {
   pendingCount?: number;
   unreadCount?: number;
+  features?: Record<FeatureKey, boolean>;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -80,13 +86,17 @@ export default function AdminNav({
     setMoreOpen(false);
   }, [pathname]);
 
-  const allItems = groups.flatMap((g) => g.items);
-  const pinned = PINNED_HREFS.map((href) => allItems.find((i) => i.href === href)!).filter(Boolean);
+  const visibleGroups = groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.feature || features?.[i.feature] !== false) }))
+    .filter((g) => g.items.length > 0);
+
+  const allItems = visibleGroups.flatMap((g) => g.items);
+  const pinned = PINNED_HREFS.map((href) => allItems.find((i) => i.href === href)).filter(Boolean) as NavItem[];
   // My Trips is handled as its own standalone link above these groups
   // (no longer worth a whole "My Driving" section now that Scan Vehicle
   // is pinned) — exclude both it and the now-empty Overview group here so
   // it doesn't also show up a second time under a group heading.
-  const moreGroups = groups
+  const moreGroups = visibleGroups
     .map((g) => ({ ...g, items: g.items.filter((i) => !PINNED_HREFS.includes(i.href)) }))
     .filter((g) => g.items.length > 0 && g.label !== "Overview" && g.label !== "My Driving");
   const moreIsActive = pathname === "/trips" || moreGroups.some((g) => g.items.some((i) => isActive(i, pathname)));
@@ -101,7 +111,7 @@ export default function AdminNav({
           <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
         </div>
         <div className="px-2 pb-4">
-          {groups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className="mb-3">
               <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-paper/40">{group.label}</p>
               <ul className="flex flex-col gap-1">

@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
+import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
-export default async function DriverDashboard() {
+export default async function DriverDashboard({ searchParams }: { searchParams: { featureDisabled?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -21,19 +22,24 @@ export default async function DriverDashboard() {
     redirect("/admin");
   }
 
-  const { data: activeTrip } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name, photo_url)")
-    .eq("driver_id", user!.id)
-    .eq("status", "active")
-    .maybeSingle();
-
-  const { data: completedTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("driver_id", user!.id)
-    .eq("status", "completed")
-    .order("start_datetime", { ascending: false });
+  const [{ data: activeTrip }, { data: completedTrips }, features] = await Promise.all([
+    supabase
+      .from("vehicle_usage")
+      .select("*, vehicle:vehicles(name, photo_url)")
+      .eq("driver_id", user!.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("vehicle_usage")
+      .select("*, vehicle:vehicles(name)")
+      .eq("driver_id", user!.id)
+      .eq("status", "completed")
+      .order("start_datetime", { ascending: false }),
+    // Vehicle Check / Report an Incident below are only shown when this
+    // organisation's admin hasn't switched them off — middleware.ts is
+    // what actually blocks the pages if someone still has an old link.
+    getViewerFeatures(supabase, user!.id),
+  ]);
 
   const trips = completedTrips ?? [];
   const now = new Date();
@@ -50,6 +56,11 @@ export default async function DriverDashboard() {
   return (
     <div className="space-y-5">
       <SuccessBanner />
+      {searchParams.featureDisabled && (
+        <p className="rounded-lg bg-paper px-3 py-2 text-xs font-medium text-steel">
+          That feature isn't available for your organisation right now.
+        </p>
+      )}
       <h1 className="font-display text-2xl font-semibold text-ink">Kia ora, {profile?.name}</h1>
 
       {activeTrip ? (
@@ -136,18 +147,22 @@ export default async function DriverDashboard() {
         >
           Book a Vehicle
         </Link>
-        <Link
-          href="/vehicle-check"
-          className="flex items-center justify-center rounded-xl border border-brand/40 bg-brand/10 py-3 text-sm font-semibold text-brand"
-        >
-          Vehicle Check
-        </Link>
-        <Link
-          href="/report-incident"
-          className="flex items-center justify-center rounded-xl border border-rust/40 bg-rust/10 py-3 text-sm font-semibold text-rust"
-        >
-          Report an Incident
-        </Link>
+        {features.vehicle_checks && (
+          <Link
+            href="/vehicle-check"
+            className="flex items-center justify-center rounded-xl border border-brand/40 bg-brand/10 py-3 text-sm font-semibold text-brand"
+          >
+            Vehicle Check
+          </Link>
+        )}
+        {features.incident_reports && (
+          <Link
+            href="/report-incident"
+            className="flex items-center justify-center rounded-xl border border-rust/40 bg-rust/10 py-3 text-sm font-semibold text-rust"
+          >
+            Report an Incident
+          </Link>
+        )}
       </div>
     </div>
   );

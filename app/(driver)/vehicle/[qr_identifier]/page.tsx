@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StartTripForm, FinishTripForm } from "./VehicleForms";
 import OverrideBookingForm from "./OverrideBookingForm";
 import Link from "next/link";
+import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
 export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
   const supabase = createClient();
@@ -25,6 +26,7 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
 
   const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
   const isAdmin = profile?.role === "admin";
+  const features = await getViewerFeatures(supabase, user!.id);
 
   const { data: activeTrip } = await supabase
     .from("vehicle_usage")
@@ -149,20 +151,26 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
         <StartTripForm vehicleId={vehicle.id} defaultKm={vehicle.current_odometer} />
       </div>
 
-      <div className="mt-3 flex gap-2">
-        <Link
-          href={`/vehicle-check?vehicleId=${vehicle.id}`}
-          className="flex-1 rounded-xl border border-brand/40 bg-brand/10 py-2.5 text-center text-sm font-semibold text-brand"
-        >
-          Vehicle Check
-        </Link>
-        <Link
-          href={`/report-incident?vehicleId=${vehicle.id}`}
-          className="flex-1 rounded-xl border border-rust/40 bg-rust/10 py-2.5 text-center text-sm font-semibold text-rust"
-        >
-          Report Incident
-        </Link>
-      </div>
+      {(features.vehicle_checks || features.incident_reports) && (
+        <div className="mt-3 flex gap-2">
+          {features.vehicle_checks && (
+            <Link
+              href={`/vehicle-check?vehicleId=${vehicle.id}`}
+              className="flex-1 rounded-xl border border-brand/40 bg-brand/10 py-2.5 text-center text-sm font-semibold text-brand"
+            >
+              Vehicle Check
+            </Link>
+          )}
+          {features.incident_reports && (
+            <Link
+              href={`/report-incident?vehicleId=${vehicle.id}`}
+              className="flex-1 rounded-xl border border-rust/40 bg-rust/10 py-2.5 text-center text-sm font-semibold text-rust"
+            >
+              Report Incident
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }

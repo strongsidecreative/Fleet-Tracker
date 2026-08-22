@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { featureForPath, normaliseFeatures } from "@/lib/orgFeatures";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -58,22 +59,46 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // A page/route this request is hitting that's behind a per-organisation
+  // feature toggle (Incident Reports, Vehicle Checks, Reports, Audit
+  // Log). Only paths matching one of these get the extra query below —
+  // everything else (scan, trips, vehicles, bookings, account) is
+  // untouched.
+  const requiredFeature = featureForPath(path);
+
   // Logged in: enforce the admin/driver split server-side, not just by
-  // hiding nav links. A driver pasting an /admin URL in gets bounced.
-  if (user && isAdminRoute) {
+  // hiding nav links. A driver pasting an /admin URL in gets bounced. The
+  // same query also covers the feature-toggle check below when needed,
+  // so a disabled feature is blocked here too — not just hidden from nav
+  // — whether it's a page load or a Server Action posted to the same
+  // route.
+  if (user && (isAdminRoute || requiredFeature)) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active")
+      .select("role, active, organisation:organisations(features)")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.active) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(new URL("/login", request.url));
+    if (isAdminRoute) {
+      if (!profile?.active) {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(new URL("/login", request.url));
+      }
+
+      if (profile.role !== "admin") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
     }
 
-    if (profile.role !== "admin") {
-      return NextResponse.redirect(new URL("/", request.url));
+    if (requiredFeature && profile) {
+      const orgRaw = profile.organisation as unknown;
+      const org = Array.isArray(orgRaw) ? orgRaw[0] : orgRaw;
+      const features = normaliseFeatures((org as { features?: unknown } | null | undefined)?.features);
+
+      if (!features[requiredFeature]) {
+        const fallback = isAdminRoute ? "/admin" : "/";
+        return NextResponse.redirect(new URL(`${fallback}?featureDisabled=${requiredFeature}`, request.url));
+      }
     }
   }
 

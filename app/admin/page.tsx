@@ -4,7 +4,7 @@ import { overallSeverity, wofStatus, regoStatus, rucStatus, serviceStatus, SEVER
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import WeeklyKmChart from "@/components/WeeklyKmChart";
 
-export default async function AdminDashboard() {
+export default async function AdminDashboard({ searchParams }: { searchParams: { featureDisabled?: string } }) {
   const supabase = createClient();
   // Same reasoning as app/admin/layout.tsx: middleware already revalidated
   // the session for this request, so getSession() (no network round trip)
@@ -74,6 +74,12 @@ export default async function AdminDashboard() {
   return (
     <div className="space-y-5">
       <h1 className="font-display text-xl font-bold text-ink">Admin Dashboard</h1>
+
+      {searchParams.featureDisabled && (
+        <p className="rounded-lg bg-paper px-3 py-2 text-xs font-medium text-steel">
+          That feature is switched off for your organisation. You can turn it back on from Account.
+        </p>
+      )}
 
       {!!unreadCount && unreadCount > 0 && (
         <Link

@@ -4,6 +4,8 @@ import PushSubscribeButton from "@/components/PushSubscribeButton";
 import { RestartTourButton } from "@/components/tour/TourLauncher";
 import { adminTourSteps } from "@/components/tour/tourSteps";
 import OrganisationCard from "./OrganisationCard";
+import FeatureTogglesCard from "./FeatureTogglesCard";
+import { normaliseFeatures } from "@/lib/orgFeatures";
 
 export default async function AdminAccountPage() {
   const supabase = createClient();
@@ -13,7 +15,7 @@ export default async function AdminAccountPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, email, role, organisation:organisations(name)")
+    .select("name, email, role, organisation:organisations(name, features)")
     .eq("id", user!.id)
     .single();
 
@@ -23,9 +25,11 @@ export default async function AdminAccountPage() {
   // type, since there's no generated Database type in this project to
   // give postgrest-js an accurate shape to infer from in the first place.
   const organisationRaw = profile?.organisation as unknown;
-  const organisationName = Array.isArray(organisationRaw)
-    ? organisationRaw[0]?.name
-    : (organisationRaw as { name?: string } | null | undefined)?.name;
+  const organisation = Array.isArray(organisationRaw)
+    ? organisationRaw[0]
+    : (organisationRaw as { name?: string; features?: unknown } | null | undefined);
+  const organisationName = organisation?.name;
+  const features = normaliseFeatures(organisation?.features);
 
   return (
     <div>
@@ -37,6 +41,10 @@ export default async function AdminAccountPage() {
 
       <div className="mb-4 max-w-sm">
         <OrganisationCard organisationName={organisationName ?? ""} />
+      </div>
+
+      <div className="mb-4 max-w-sm">
+        <FeatureTogglesCard features={features} />
       </div>
 
       <div className="max-w-sm space-y-3 rounded-xl border border-steel/20 bg-white p-4">

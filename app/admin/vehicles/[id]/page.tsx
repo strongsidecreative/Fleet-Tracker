@@ -1,10 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import EditVehicleForm from "./EditVehicleForm";
+import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
 export default async function VehicleDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: vehicle } = await supabase.from("vehicles").select("*").eq("id", params.id).single();
+  const features = await getViewerFeatures(supabase, user!.id);
 
   if (!vehicle) {
     return <p className="text-sm text-steel">Vehicle not found.</p>;
@@ -42,12 +47,14 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
         >
           View / Print QR Code
         </a>
-        <a
-          href={`/admin/vehicle-checks?vehicleId=${vehicle.id}`}
-          className="inline-block rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink"
-        >
-          Vehicle Check History
-        </a>
+        {features.vehicle_checks && (
+          <a
+            href={`/admin/vehicle-checks?vehicleId=${vehicle.id}`}
+            className="inline-block rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink"
+          >
+            Vehicle Check History
+          </a>
+        )}
       </div>
 
       <div className="mb-4">
