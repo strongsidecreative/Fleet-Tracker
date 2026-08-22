@@ -40,11 +40,6 @@ export default async function VehicleQrPage({ params }: { params: { id: string }
       >
         Done, back to vehicles
       </Link>
-
-      <p className="mt-4 text-center text-xs text-steel print:hidden">
-        This QR points to {scanUrl}. If your site URL changes (e.g. after deploying), update
-        NEXT_PUBLIC_SITE_URL and reprint.
-      </p>
     </div>
   );
 }
