@@ -40,6 +40,37 @@ export default function ReportsIndexPage() {
           Last Month
         </Link>
       </div>
+      <p className="mb-2 mt-5 text-sm font-bold text-ink">Custom Range</p>
+      <form
+        action="/admin/reports/view"
+        method="get"
+        className="flex flex-wrap items-end gap-2 rounded-xl border border-steel/20 bg-white p-3"
+      >
+        <label className="flex flex-col text-xs font-medium text-steel">
+          Start
+          <input
+            type="date"
+            name="start"
+            required
+            max={today}
+            className="mt-1 rounded-lg border border-steel/30 px-2 py-1.5 text-sm text-ink"
+          />
+        </label>
+        <label className="flex flex-col text-xs font-medium text-steel">
+          End
+          <input
+            type="date"
+            name="end"
+            required
+            max={today}
+            className="mt-1 rounded-lg border border-steel/30 px-2 py-1.5 text-sm text-ink"
+          />
+        </label>
+        <button type="submit" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
+          View Report
+        </button>
+      </form>
+
       <p className="mt-4 text-xs text-steel">
         Weekly and monthly reports also generate automatically as notifications — see the bell icon.
       </p>
