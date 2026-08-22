@@ -5,25 +5,27 @@ import { adminTourSteps } from "@/components/tour/tourSteps";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { data: pending } = await supabase
-    .from("bookings")
-    .select("id, series_id")
-    .eq("approval_status", "pending");
+  // middleware.ts already called getUser() (which revalidates against
+  // Supabase Auth) for every /admin request and redirected anyone who
+  // isn't an active admin — so by the time we're here, re-validating is
+  // redundant. getSession() just decodes the already-verified JWT from
+  // the cookie, no network round trip, so it's safe to use here purely
+  // to read the id for these queries.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session!.user.id;
+
+  const [{ data: pending }, { count: unreadCount }] = await Promise.all([
+    supabase.from("bookings").select("id, series_id").eq("approval_status", "pending"),
+    // Feeds the small dot on the mobile "More" tab — Notifications lives
+    // behind it now, so it needs some way to signal "something's waiting"
+    // without a full count badge cluttering the tab bar.
+    supabase.from("notifications").select("*", { count: "exact", head: true }).eq("recipient_id", userId).eq("read", false),
+  ]);
 
   const distinctRequestCount = new Set((pending ?? []).map((b) => b.series_id ?? b.id)).size;
-
-  // Feeds the small dot on the mobile "More" tab — Notifications lives
-  // behind it now, so it needs some way to signal "something's waiting"
-  // without a full count badge cluttering the tab bar.
-  const { count: unreadCount } = await supabase
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("recipient_id", user!.id)
-    .eq("read", false);
 
   return (
     <div className="min-h-screen md:flex">

@@ -6,23 +6,29 @@ import WeeklyKmChart from "@/components/WeeklyKmChart";
 
 export default async function AdminDashboard() {
   const supabase = createClient();
+  // Same reasoning as app/admin/layout.tsx: middleware already revalidated
+  // the session for this request, so getSession() (no network round trip)
+  // is enough here — we just need the id.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session!.user.id;
 
-  const { count: unreadCount } = await supabase
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("recipient_id", user!.id)
-    .eq("read", false);
-
-  const { data: vehicles } = await supabase.from("vehicles").select("*").eq("active", true);
-  const { data: activeTrips } = await supabase.from("vehicle_usage").select("vehicle_id").eq("status", "active");
-  const { data: completedTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("status", "completed");
-  const { data: drivers } = await supabase.from("profiles").select("id, name").eq("role", "driver");
+  // None of these five queries depend on each other, so run them together
+  // instead of one after another.
+  const [
+    { count: unreadCount },
+    { data: vehicles },
+    { data: activeTrips },
+    { data: completedTrips },
+    { data: drivers },
+  ] = await Promise.all([
+    supabase.from("notifications").select("*", { count: "exact", head: true }).eq("recipient_id", userId).eq("read", false),
+    supabase.from("vehicles").select("*").eq("active", true),
+    supabase.from("vehicle_usage").select("vehicle_id").eq("status", "active"),
+    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "completed"),
+    supabase.from("profiles").select("id, name").eq("role", "driver"),
+  ]);
 
   const inUseCount = activeTrips?.length ?? 0;
   const now = new Date();

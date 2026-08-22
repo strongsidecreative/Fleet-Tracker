@@ -77,16 +77,16 @@ export default async function AdminPeoplePage({
     );
   }
 
-  const { data: drivers } = await supabase.from("profiles").select("*").eq("role", "driver").order("name");
-  const { data: allTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("status", "completed");
-  const { data: activeTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("status", "active");
-  const { data: licences } = await supabase.from("driver_licences").select("*");
+  // These four don't depend on each other, so fetch them together.
+  const [{ data: drivers }, { data: allTrips }, { data: activeTrips }, { data: licences }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("role", "driver").order("name"),
+    // Only the columns the KM totals below actually use — this table grows
+    // without bound over time, and previously pulled every column plus a
+    // vehicle-name join for every completed trip ever, just to sum numbers.
+    supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").eq("status", "completed"),
+    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "active"),
+    supabase.from("driver_licences").select("*"),
+  ]);
 
   const now = new Date();
   const weekStart = startOfWeekNZ(now);
