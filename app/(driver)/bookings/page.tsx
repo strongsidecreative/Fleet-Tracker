@@ -31,6 +31,11 @@ function StatusBadge({ b }: { b: any }) {
   if (b.booking_status === "completed") {
     return <span className="rounded-full bg-steel/15 px-2 py-0.5 text-xs font-bold text-steel">Completed</span>;
   }
+  if (b.booking_status === "upcoming" && new Date(b.start_datetime) <= new Date()) {
+    // Same cutoff the page uses to bucket this into "Past" — the booking's start time
+    // has passed but a trip was never checked out/in against it.
+    return <span className="rounded-full bg-steel/15 px-2 py-0.5 text-xs font-bold text-steel">Missed</span>;
+  }
   return <span className="rounded-full bg-track/15 px-2 py-0.5 text-xs font-bold text-track">Upcoming</span>;
 }
 
