@@ -106,9 +106,17 @@ export default function AdminNav({
       {/* Desktop: full grouped sidebar, unchanged from before — plenty of
           vertical room for 13 items to read as a clear list. */}
       <nav className="hidden bg-ink text-paper md:block md:w-56 md:min-h-screen md:border-r md:border-steel/20" aria-label="Admin">
-        <div className="px-4 py-4 font-display text-lg font-bold uppercase tracking-wide">
-          Fleet Tracker
-          <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
+        <div className="px-4 py-4">
+          <p className="font-display text-lg font-bold uppercase tracking-wide">Fleet Tracker</p>
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
+            <Link
+              href="/"
+              className="rounded bg-brand px-2 py-1 text-xs font-semibold text-paper hover:opacity-90"
+            >
+              Switch to Driver
+            </Link>
+          </div>
         </div>
         <div className="px-2 pb-4">
           {visibleGroups.map((group) => (
@@ -149,9 +157,17 @@ export default function AdminNav({
           of the old wrapped wall of 13 buttons. Sits in normal document
           flow rather than fixed to the bottom. */}
       <nav className="border-b border-steel/20 bg-ink text-paper md:hidden" aria-label="Admin">
-        <div className="px-4 py-4 font-display text-lg font-bold uppercase tracking-wide">
-          Fleet Tracker
-          <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
+        <div className="flex items-center justify-between px-4 py-4">
+          <div className="font-display text-lg font-bold uppercase tracking-wide">
+            Fleet Tracker
+            <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
+          </div>
+          <Link
+            href="/"
+            className="rounded bg-brand px-2.5 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
+          >
+            Switch to Driver
+          </Link>
         </div>
         <ul className="flex justify-around border-t border-steel/20">
           {pinned.map((item) => {

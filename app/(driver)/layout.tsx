@@ -31,9 +31,13 @@ export default async function DriverLayout({ children }: { children: React.React
           bounce back to /admin on every "Next". */}
       {!isAdmin && <TourLauncher steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />}
       {isAdmin && (
-        <div className="border-b border-steel/20 bg-ink px-4 py-2 text-center">
-          <Link href="/admin" className="text-xs font-semibold text-brandLight underline">
-            ← Back to Admin Dashboard
+        <div className="flex items-center justify-between border-b border-steel/20 bg-ink px-4 py-4">
+          <span className="font-display text-lg font-bold uppercase tracking-wide text-paper">Fleet Tracker</span>
+          <Link
+            href="/admin"
+            className="rounded bg-brand px-2.5 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
+          >
+            Switch to Admin
           </Link>
         </div>
       )}
