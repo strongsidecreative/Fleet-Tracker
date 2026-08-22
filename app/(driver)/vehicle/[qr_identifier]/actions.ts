@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
+import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
 type ActionState = { error: string | null };
 
@@ -24,6 +26,34 @@ export async function startTrip(
 
   if (!kmRaw || Number.isNaN(km)) {
     return { error: "Please enter the kilometre reading shown on the vehicle." };
+  }
+
+  // Compulsory pre-operation check on Mondays and Fridays: a driver's
+  // first scan of the vehicle on one of those days must be preceded by a
+  // completed Pre-Operation check for that same vehicle, that same day.
+  // The page itself already hides this form and points to the check
+  // instead when this applies (see page.tsx) — this is the authoritative
+  // server-side copy of that same rule, so it holds even if this action
+  // is somehow invoked without going through that page.
+  if (isComplianceCheckDayNZ()) {
+    const features = await getViewerFeatures(supabase, user.id);
+    if (features.vehicle_checks) {
+      const { data: todaysChecks } = await supabase
+        .from("vehicle_checks")
+        .select("created_at")
+        .eq("vehicle_id", vehicleId)
+        .eq("driver_id", user.id)
+        .eq("check_type", "pre")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      const hasCheckToday = (todaysChecks ?? []).some((c) => isTodayNZ(c.created_at));
+      if (!hasCheckToday) {
+        return {
+          error: "Vehicle checks are compulsory on Mondays and Fridays — please complete a Pre-Operation Vehicle Check for this vehicle before starting.",
+        };
+      }
+    }
   }
 
   const { error } = await supabase.from("vehicle_usage").insert({

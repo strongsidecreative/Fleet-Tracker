@@ -3,6 +3,7 @@ import { StartTripForm, FinishTripForm } from "./VehicleForms";
 import OverrideBookingForm from "./OverrideBookingForm";
 import Link from "next/link";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 
 export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
   const supabase = createClient();
@@ -27,6 +28,25 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
   const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
   const isAdmin = profile?.role === "admin";
   const features = await getViewerFeatures(supabase, user!.id);
+
+  // Compulsory pre-operation check on Mondays and Fridays — a driver's
+  // first scan of this vehicle on one of those days must be preceded by
+  // a completed Pre-Operation check for it, that same day. Skipped
+  // entirely if this organisation has turned Vehicle Checks off, since
+  // there'd be no way to satisfy it. startTrip() in actions.ts enforces
+  // the same rule server-side; this is what drives the actual UI.
+  let needsComplianceCheck = false;
+  if (features.vehicle_checks && isComplianceCheckDayNZ()) {
+    const { data: todaysChecks } = await supabase
+      .from("vehicle_checks")
+      .select("created_at")
+      .eq("vehicle_id", vehicle.id)
+      .eq("driver_id", user!.id)
+      .eq("check_type", "pre")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    needsComplianceCheck = !(todaysChecks ?? []).some((c) => isTodayNZ(c.created_at));
+  }
 
   const { data: activeTrip } = await supabase
     .from("vehicle_usage")
@@ -148,7 +168,23 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
           <p className="text-xs text-steel">Current Odometer</p>
           <p className="odometer text-xl font-bold text-ink">{vehicle.current_odometer.toLocaleString("en-NZ")} KM</p>
         </div>
-        <StartTripForm vehicleId={vehicle.id} defaultKm={vehicle.current_odometer} />
+        {needsComplianceCheck ? (
+          <div className="space-y-3 rounded-xl border border-amber/40 bg-amber/10 p-3">
+            <p className="text-sm font-semibold text-ink">Vehicle check required before you can start</p>
+            <p className="text-xs text-steel">
+              Pre-Operation checks are compulsory on Mondays and Fridays. Complete one for {vehicle.name}, then
+              scan this vehicle again to start your trip.
+            </p>
+            <Link
+              href={`/vehicle-check?vehicleId=${vehicle.id}`}
+              className="block w-full rounded-xl bg-ink py-3 text-center text-base font-semibold text-paper"
+            >
+              Do Vehicle Check Now
+            </Link>
+          </div>
+        ) : (
+          <StartTripForm vehicleId={vehicle.id} defaultKm={vehicle.current_odometer} />
+        )}
       </div>
 
       {(features.vehicle_checks || features.incident_reports) && (

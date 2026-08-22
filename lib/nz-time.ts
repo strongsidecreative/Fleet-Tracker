@@ -69,7 +69,29 @@ export function startOfMonthNZ(date: Date = new Date()) {
   return new Date(Date.UTC(year, month - 1, 1));
 }
 
-export function nzToday(): string {
-  const { year, month, day } = nzDateParts(new Date());
+function nzDateString(date: Date): string {
+  const { year, month, day } = nzDateParts(date);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function nzToday(): string {
+  return nzDateString(new Date());
+}
+
+/** True if `date` falls on the same NZ calendar day as right now. */
+export function isTodayNZ(date: string | Date): boolean {
+  return nzDateString(new Date(date)) === nzToday();
+}
+
+// Compulsory vehicle-check days — see startTrip() in
+// app/(driver)/vehicle/[qr_identifier]/actions.ts. Currently fixed to
+// Monday and Friday; if this ever needs to be configurable per
+// organisation rather than a fleet-wide constant, this is the one place
+// to change.
+const COMPULSORY_CHECK_WEEKDAYS = new Set(["Mon", "Fri"]);
+
+/** True if today (NZ time) is a day a pre-operation check is compulsory. */
+export function isComplianceCheckDayNZ(date: Date = new Date()): boolean {
+  const { weekday } = nzDateParts(date);
+  return COMPULSORY_CHECK_WEEKDAYS.has(weekday!);
 }
