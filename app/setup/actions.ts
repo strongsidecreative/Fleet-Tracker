@@ -86,5 +86,9 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
     };
   }
 
-  redirect("/login?setup=success");
+  // Straight to the Admin Guide (benefits + install steps + a way to sign
+  // in) rather than the bare login page — the new admin hasn't installed
+  // the app or seen what it does yet, so dropping them at a login form
+  // with nothing else is a dead end.
+  redirect("/guide/admin?setup=success");
 }

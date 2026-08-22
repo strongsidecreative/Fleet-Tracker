@@ -168,6 +168,9 @@ h2{font-size:1.7rem;margin:0 0 8px;letter-spacing:-0.01em;}
 /* Feature cards */
 .card-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media (max-width:640px){.card-grid{grid-template-columns:1fr;}}
+.card-grid.thirds{grid-template-columns:1fr 1fr 1fr;}
+@media (max-width:880px){.card-grid.thirds{grid-template-columns:1fr 1fr;}}
+@media (max-width:640px){.card-grid.thirds{grid-template-columns:1fr;}}
 .feature-card{
   background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:20px;
 }
@@ -229,14 +232,22 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     </a>
     <button class="nav-toggle" onclick="document.querySelector('nav.links').classList.toggle('open')">Menu</button>
     <nav class="links">
-      <a href="/guide#install" >Install</a>
+      <a href="#benefits" >Why Fleet Tracker</a>
+      <a href="#getting-started" >Getting Started</a>
+      <a href="#install" >Install</a>
       <a href="/guide/driver" >Driver Guide</a>
       <a href="/guide/admin" class="current">Admin Guide</a>
-      <a href="/guide#faq" >FAQ</a>
+      <a href="#faq" >FAQ</a>
       <a class="nav-open-app" href="https://fleet-tracker-liard.vercel.app" target="_blank" rel="noopener">Open App ↗</a>
     </nav>
   </div>
 </header>
+
+<div class="wrap" style="padding-top:24px;">
+  <div id="setup-banner" class="callout" style="display:none;">
+    <strong>🎉 You're all set.</strong> <span id="setup-banner-text">Install the app below, then sign in with the password you just created.</span>
+  </div>
+</div>
 
 
 <div class="page-header">
@@ -246,6 +257,67 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     <p class="lead">Everything a driver can do, plus the full admin navigation: Dashboard, Scan Vehicle, My Trips, Vehicles, People, Bookings, Vehicle Checks, Incidents, Reports, Records, Audit, Notifications, and Account. This page covers everything an admin needs — including how to install the app.</p>
   </div>
 </div>
+
+<section class="block" id="benefits" style="border-top:none;">
+  <div class="wrap">
+    <div class="eyebrow">Why Fleet Tracker</div>
+    <h2>Built for how your organisation actually runs a fleet</h2>
+    <p class="section-intro">Whether you're managing two vehicles or twenty, these are the problems Fleet Tracker is built to solve.</p>
+    <div class="card-grid thirds">
+      <div class="feature-card">
+        <h4><span class="dot track"></span>Compliance, handled automatically</h4>
+        <p>WOF, registration, and driver licence dates are tracked for you, with alerts before anything lapses — no more surprises at a checkpoint or a fine nobody saw coming.</p>
+      </div>
+      <div class="feature-card">
+        <h4><span class="dot brand"></span>Real structure, not a group chat</h4>
+        <p>Every person in your organisation is either an admin or a driver, with clear permissions. No more relying on someone remembering to text the right group.</p>
+      </div>
+      <div class="feature-card">
+        <h4><span class="dot amber"></span>Hours back for admins</h4>
+        <p>Adding people, approving bookings, exporting reports — all in a few clicks instead of chasing paperwork.</p>
+      </div>
+      <div class="feature-card">
+        <h4><span class="dot track"></span>Easy enough for every driver</h4>
+        <p>Starting and finishing a trip is a single QR scan. No app training session required — if someone can scan a code, they can use Fleet Tracker.</p>
+      </div>
+      <div class="feature-card">
+        <h4><span class="dot rust"></span>A full record, not "he said, she said"</h4>
+        <p>Vehicle checks and incident reports capture photos and comments at the time they happen, so when something goes wrong, you have an actual record — not a memory.</p>
+      </div>
+      <div class="feature-card">
+        <h4><span class="dot brand"></span>Always know who has what, right now</h4>
+        <p>See at a glance which vehicles are out, who has them, and for how long — instead of finding out only when someone comes looking for the keys.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="getting-started">
+  <div class="wrap">
+    <div class="eyebrow">Getting started</div>
+    <h2>From one link to a fully running fleet</h2>
+    <p class="section-intro">Only one person needs to do anything to get your organisation started. Everyone else just clicks a link, installs, and signs in.</p>
+    <ol class="steps">
+      <li>
+        <strong>Your fleet coordinator gets one link</strong>
+        <p>A single private sign-up link. Opening it and entering an organisation name, their own name, email, and a password does two things at once: it creates your organisation, and makes them its first admin.</p>
+      </li>
+      <li>
+        <strong>Straight into installation &amp; sign-in</strong>
+        <p>That link lands them directly on this page — benefits, install steps for their phone or computer, and a button to sign in with the password they just set.</p>
+      </li>
+      <li>
+        <strong>They invite the rest of the team</strong>
+        <p>From inside the app, the admin adds admins and drivers. Each person gets an emailed link that takes them to their own Admin or Driver Guide — benefits, install steps, and a sign-in button — before they ever touch the app itself.</p>
+      </li>
+      <li>
+        <strong>Everyone signs in and gets a quick tour</strong>
+        <p>The first time each person logs in, a short in-app tour walks them through the basics for their role. No training session, manual, or handholding required.</p>
+      </li>
+    </ol>
+    <div class="callout"><strong>Note:</strong> every organisation on Fleet Tracker is fully separate — your vehicles, drivers, bookings, and records are only ever visible to people inside your own organisation.</div>
+  </div>
+</section>
 
 <section class="block" style="border-top:none;">
   <div class="wrap">
@@ -506,6 +578,21 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     <div class="eyebrow">Help</div>
     <h2>Frequently asked questions</h2>
 
+    <details>
+      <summary>Is our organisation's data visible to anyone outside it?</summary>
+      <p>No. Every admin and driver only ever sees their own organisation's vehicles, people, and records. There's no shared or cross-organisation visibility.</p>
+    </details>
+
+    <details>
+      <summary>Do we need to install any software or set anything up technically?</summary>
+      <p>No. Fleet Tracker runs in the browser and installs straight from a phone or computer like a normal app shortcut — there's no app store or IT setup involved. See the install steps below for iPhone, Android, and desktop.</p>
+    </details>
+
+    <details>
+      <summary>Is there a limit on how many admins or drivers we can add?</summary>
+      <p>No — add as many as your organisation needs, whenever you need to.</p>
+    </details>
+
     <details open>
       <summary>I scanned a vehicle's QR code and it says the vehicle is reserved. What now?</summary>
       <p>That means it's currently reserved by someone else's approved booking. Check with them first — if there's a genuine reason you need it anyway, an admin can override the reservation from their side, and the override is logged.</p>
@@ -563,7 +650,21 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
   document.querySelectorAll('nav.links a').forEach(a=>{
     a.addEventListener('click', ()=>document.querySelector('nav.links').classList.remove('open'));
   });
-  
+  (function(){
+    var params = new URLSearchParams(location.search);
+    if (params.get('setup') === 'success') {
+      var banner = document.getElementById('setup-banner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+      if (window.history && window.history.replaceState) {
+        var url = new URL(location.href);
+        url.searchParams.delete('setup');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      }
+    }
+  })();
 </script>
 </body>
 </html>

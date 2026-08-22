@@ -229,14 +229,20 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
     </a>
     <button class="nav-toggle" onclick="document.querySelector('nav.links').classList.toggle('open')">Menu</button>
     <nav class="links">
-      <a href="/guide#install" >Install</a>
+      <a href="#install" >Install</a>
       <a href="/guide/driver" class="current">Driver Guide</a>
       <a href="/guide/admin" >Admin Guide</a>
-      <a href="/guide#faq" >FAQ</a>
+      <a href="#faq" >FAQ</a>
       <a class="nav-open-app" href="https://fleet-tracker-liard.vercel.app" target="_blank" rel="noopener">Open App ↗</a>
     </nav>
   </div>
 </header>
+
+<div class="wrap" style="padding-top:24px;">
+  <div id="setup-banner" class="callout" style="display:none;">
+    <strong>🎉 You're all set.</strong> <span id="setup-banner-text">Install the app below, then sign in with the password you just created. A quick tour will walk you through the basics the first time you log in.</span>
+  </div>
+</div>
 
 
 <div class="page-header">
@@ -440,7 +446,21 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
   document.querySelectorAll('nav.links a').forEach(a=>{
     a.addEventListener('click', ()=>document.querySelector('nav.links').classList.remove('open'));
   });
-  
+  (function(){
+    var params = new URLSearchParams(location.search);
+    if (params.get('setup') === 'success') {
+      var banner = document.getElementById('setup-banner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+      if (window.history && window.history.replaceState) {
+        var url = new URL(location.href);
+        url.searchParams.delete('setup');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      }
+    }
+  })();
 </script>
 </body>
 </html>

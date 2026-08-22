@@ -50,13 +50,28 @@ export default function ResetPasswordForm() {
       return;
     }
     setDone(true);
-    setTimeout(() => router.push("/login"), 2000);
+
+    // Send them to their role's guide (benefits + install steps + a way to
+    // sign in) rather than straight to a bare login form — for someone who
+    // was just invited, that's the first time they've seen what the app
+    // does or how to install it. Falls back to /login if the role lookup
+    // fails for any reason, so this never leaves someone stuck.
+    let destination = "/login";
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      if (profile?.role === "admin") destination = "/guide/admin?setup=success";
+      else if (profile?.role === "driver") destination = "/guide/driver?setup=success";
+    }
+    setTimeout(() => router.push(destination), 1800);
   }
 
   if (done) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-paper px-4">
-        <p className="text-center text-sm text-ink">Password updated. Redirecting you to login…</p>
+        <p className="text-center text-sm text-ink">Password updated. Taking you to your guide…</p>
       </div>
     );
   }
