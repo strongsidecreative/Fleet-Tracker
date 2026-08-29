@@ -1,2 +1,0 @@
-id,name,make,model,year,registration,photo_url,current_odometer,active,qr_identifier,created_at,updated_at,wof_due,rego_due,service_due_date,service_due_km,ruc_purchased_to_km,last_service_date,last_service_odometer
-542572db-5dbc-4470-b391-6b89b5c6c8ee,Maisey,Mazda,Axela,,QLQ344,,110279,true,b200a67c-86dd-4912-ac34-15c6784260f2,2026-08-13 05:41:00.21322+00,2026-08-13 05:49:09.888634+00,,,,,,,

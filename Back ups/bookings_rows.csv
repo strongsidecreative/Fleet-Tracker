@@ -1,2 +1,0 @@
-id,vehicle_id,driver_id,start_datetime,end_datetime,notes,status,created_at,title,approval_status,booking_status,approving_admin_id,decided_by,decided_at,decision_note,created_by,vehicle_required,series_id,linked_trip_id
-fbfe82a4-ea9f-4d7f-872b-6bae0990becf,542572db-5dbc-4470-b391-6b89b5c6c8ee,59d8e9b7-9032-432a-bc30-a84c1fecb0f9,2026-08-18 01:25:00+00,2026-08-18 03:23:00+00,shopping,upcoming,2026-08-14 09:23:26.872976+00,Booking,approved,upcoming,,,,,59d8e9b7-9032-432a-bc30-a84c1fecb0f9,false,,
