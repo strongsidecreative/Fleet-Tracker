@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
+import ErrorBanner from "@/components/ErrorBanner";
 import { licenceSeverity, LICENCE_LABEL, LICENCE_BADGE_CLASS } from "@/lib/licenceStatus";
 
 // Drivers and Admins used to be two separate top-level nav tabs, but both
@@ -48,6 +49,7 @@ export default async function AdminPeoplePage({
     return (
       <div>
         <SuccessBanner />
+        <ErrorBanner />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
             <TabLink value="driver" label="Drivers" />
@@ -123,6 +125,7 @@ export default async function AdminPeoplePage({
   return (
     <div>
       <SuccessBanner />
+      <ErrorBanner />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
           <TabLink value="driver" label="Drivers" />
@@ -152,7 +155,7 @@ export default async function AdminPeoplePage({
               <div className="flex items-center justify-between">
                 <Link href={`/admin/drivers/${d.id}`} className="flex-1">
                   <p className="font-medium text-ink">
-                    {d.name} {!d.active && <span className="text-xs text-steel">(inactive)</span>}
+                    {d.name} {!d.active && <span className="text-xs text-steel">(deactivated)</span>}
                   </p>
                   <p className="mt-0.5 text-xs text-steel">
                     {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
@@ -181,18 +184,21 @@ export default async function AdminPeoplePage({
                       </button>
                     </form>
                   )}
-                  <form action={toggleUserActive.bind(null, d.id, !d.active)}>
-                    <ConfirmSubmitButton
-                      confirmMessage={
-                        d.active
-                          ? `Deactivate ${d.name}? They won't be able to log in until reactivated.`
-                          : `Reactivate ${d.name}?`
-                      }
-                      className="text-xs font-medium text-steel underline"
-                    >
-                      {d.active ? "Deactivate" : "Reactivate"}
-                    </ConfirmSubmitButton>
-                  </form>
+                  {/* Driver deactivation is one-way now (see deactivateDriverFromAdmin) —
+                      it also frees up their real email for a fresh invite, which the
+                      database can't cleanly undo, so there's no "Reactivate" once a
+                      driver has been deactivated. Their name and full history stay
+                      intact everywhere else in the app. */}
+                  {d.active && (
+                    <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
+                      <ConfirmSubmitButton
+                        confirmMessage={`Deactivate ${d.name}? This can't be undone. They'll be logged out permanently and their email will be free to invite again — right away, to the same person or someone new. All their trips, bookings, incidents, and checks stay exactly as they are.`}
+                        className="text-xs font-medium text-rust underline"
+                      >
+                        Deactivate
+                      </ConfirmSubmitButton>
+                    </form>
+                  )}
                 </div>
               </div>
               <div className="mt-2 flex justify-between text-xs text-steel">

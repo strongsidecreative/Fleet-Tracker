@@ -4,6 +4,9 @@ import { licenceSeverity, LICENCE_LABEL, LICENCE_BADGE_CLASS } from "@/lib/licen
 import PushSubscribeButton from "@/components/PushSubscribeButton";
 import { RestartTourButton } from "@/components/tour/TourLauncher";
 import { driverTourSteps } from "@/components/tour/tourSteps";
+import { deactivateOwnDriverAccount } from "@/app/admin/users/actions";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import ErrorBanner from "@/components/ErrorBanner";
 
 export default async function AccountPage() {
   const supabase = createClient();
@@ -19,6 +22,8 @@ export default async function AccountPage() {
   return (
     <div className="space-y-4">
       <h1 className="mb-1 font-display text-xl font-bold text-ink">Account</h1>
+
+      <ErrorBanner />
 
       <RestartTourButton steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />
 
@@ -77,6 +82,30 @@ export default async function AccountPage() {
           )}
         </div>
       </div>
+
+      {/* Self-service deactivation — driver-only. An admin viewing this
+          same page in driver mode doesn't get this button; their account
+          is managed from the Admin People list instead, where deactivating
+          an admin stays a plain reversible toggle. This one is one-way:
+          it frees the email for a fresh invite, which the database can't
+          cleanly undo, and signs the driver straight out. */}
+      {profile?.role === "driver" && (
+        <div className="rounded-xl border border-rust/30 bg-white p-4">
+          <p className="mb-1 text-sm font-bold text-ink">Deactivate Account</p>
+          <p className="mb-3 text-xs text-steel">
+            You'll be logged out and won't be able to log back in. Your trip, booking, and incident history is kept.
+            This can't be undone.
+          </p>
+          <form action={deactivateOwnDriverAccount}>
+            <ConfirmSubmitButton
+              confirmMessage="Deactivate your account? You'll be logged out and this can't be undone."
+              className="rounded-lg border border-rust px-4 py-2 text-sm font-semibold text-rust"
+            >
+              Deactivate Account
+            </ConfirmSubmitButton>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
