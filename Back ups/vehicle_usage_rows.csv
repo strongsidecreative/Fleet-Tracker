@@ -1,0 +1,2 @@
+id,vehicle_id,driver_id,start_km,end_km,kilometres_used,start_datetime,end_datetime,status,created_at,updated_at
+84fe8f84-dc9e-4a67-a9b2-1ac45511ef6a,542572db-5dbc-4470-b391-6b89b5c6c8ee,59d8e9b7-9032-432a-bc30-a84c1fecb0f9,110259,110279,20,2026-08-13 05:43:42.030949+00,2026-08-13 05:49:09.916+00,completed,2026-08-13 05:43:42.030949+00,2026-08-13 05:43:42.030949+00

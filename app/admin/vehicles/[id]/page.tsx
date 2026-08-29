@@ -5,34 +5,40 @@ import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
 export default async function VehicleDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: vehicle } = await supabase.from("vehicles").select("*").eq("id", params.id).single();
-  const features = await getViewerFeatures(supabase, user!.id);
+  const [
+    {
+      data: { user },
+    },
+    { data: vehicle },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("vehicles").select("*").eq("id", params.id).single(),
+  ]);
 
   if (!vehicle) {
     return <p className="text-sm text-steel">Vehicle not found.</p>;
   }
 
   const nowIso = new Date().toISOString();
-  const { data: upcomingBookings } = await supabase
-    .from("bookings")
-    .select("*, driver:profiles(name)")
-    .eq("vehicle_id", vehicle.id)
-    .eq("approval_status", "approved")
-    .in("booking_status", ["upcoming", "active"])
-    .gte("end_datetime", nowIso)
-    .order("start_datetime", { ascending: true })
-    .limit(10);
-
-  const { data: pendingRequests } = await supabase
-    .from("bookings")
-    .select("*, driver:profiles(name)")
-    .eq("vehicle_id", vehicle.id)
-    .eq("approval_status", "pending")
-    .order("start_datetime", { ascending: true })
-    .limit(10);
+  const [features, { data: upcomingBookings }, { data: pendingRequests }] = await Promise.all([
+    getViewerFeatures(supabase, user!.id),
+    supabase
+      .from("bookings")
+      .select("*, driver:profiles(name)")
+      .eq("vehicle_id", vehicle.id)
+      .eq("approval_status", "approved")
+      .in("booking_status", ["upcoming", "active"])
+      .gte("end_datetime", nowIso)
+      .order("start_datetime", { ascending: true })
+      .limit(10),
+    supabase
+      .from("bookings")
+      .select("*, driver:profiles(name)")
+      .eq("vehicle_id", vehicle.id)
+      .eq("approval_status", "pending")
+      .order("start_datetime", { ascending: true })
+      .limit(10),
+  ]);
 
   return (
     <div>

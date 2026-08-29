@@ -1,0 +1,2 @@
+id,vehicle_id,driver_id,check_type,odometer_snapshot,overall_result,issue_count,initials,confirmed,created_at,submitted_at
+a360b37e-7288-48c4-8531-843186107bdc,542572db-5dbc-4470-b391-6b89b5c6c8ee,59d8e9b7-9032-432a-bc30-a84c1fecb0f9,pre,110279,issues_reported,1,TT,true,2026-08-19 23:17:06.584323+00,2026-08-19 23:17:06.584323+00

@@ -72,7 +72,13 @@ export default function VehicleCheckDetail({
               {it.comment && <p className="mt-1 text-sm text-steel">{it.comment}</p>}
               {it.photo_url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.photo_url} alt={it.item_label} className="mt-2 h-32 w-full rounded-lg object-cover" />
+                <img
+                  src={it.photo_url}
+                  alt={it.item_label}
+                  loading="lazy"
+                  decoding="async"
+                  className="mt-2 h-32 w-full rounded-lg object-cover"
+                />
               )}
               {it.result === "issue" && checkId && (
                 <div className="mt-2 border-t border-steel/10 pt-2">

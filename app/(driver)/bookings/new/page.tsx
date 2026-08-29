@@ -3,17 +3,10 @@ import NewBookingForm from "./NewBookingForm";
 
 export default async function NewBookingPage() {
   const supabase = createClient();
-  const { data: vehicles } = await supabase
-    .from("vehicles")
-    .select("id, name, registration")
-    .eq("active", true)
-    .order("name");
-  const { data: admins } = await supabase
-    .from("profiles")
-    .select("id, name")
-    .eq("role", "admin")
-    .eq("active", true)
-    .order("name");
+  const [{ data: vehicles }, { data: admins }] = await Promise.all([
+    supabase.from("vehicles").select("id, name, registration").eq("active", true).order("name"),
+    supabase.from("profiles").select("id, name").eq("role", "admin").eq("active", true).order("name"),
+  ]);
 
   return (
     <div>

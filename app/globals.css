@@ -2,7 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+/* Space Grotesk / Inter used to load via a render-blocking @import of
+   Google Fonts' CSS here — the browser had to fetch this stylesheet,
+   parse it, discover the @import, fetch fonts.googleapis.com, then fetch
+   the font files, all before text could render. They're now loaded via
+   next/font/google in app/layout.tsx instead, which self-hosts the font
+   files at build time (no runtime request to Google at all) and exposes
+   them as the --font-display / --font-body CSS variables referenced from
+   tailwind.config.js. Same families, same weights, same visual result —
+   just without the extra network round trip on every page load. */
 
 html {
   @apply bg-paper;

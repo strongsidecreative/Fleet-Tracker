@@ -4,21 +4,20 @@ import VehicleCheckDetail from "@/components/VehicleCheckDetail";
 export default async function AdminVehicleCheckDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const { data: check } = await supabase
-    .from("vehicle_checks")
-    .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
-    .eq("id", params.id)
-    .single();
+  // items only needs params.id (not any field from check), so it doesn't
+  // need to wait for the check row to come back first.
+  const [{ data: check }, { data: items }] = await Promise.all([
+    supabase
+      .from("vehicle_checks")
+      .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
+      .eq("id", params.id)
+      .single(),
+    supabase.from("vehicle_check_items").select("*").eq("check_id", params.id).order("created_at"),
+  ]);
 
   if (!check) {
     return <p className="text-sm text-steel">Check not found.</p>;
   }
-
-  const { data: items } = await supabase
-    .from("vehicle_check_items")
-    .select("*")
-    .eq("check_id", params.id)
-    .order("created_at");
 
   const itemIds = (items ?? []).map((it) => it.id);
   const { data: existingIncidents } = itemIds.length

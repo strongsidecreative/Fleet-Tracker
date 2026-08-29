@@ -5,14 +5,17 @@ import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 export default async function DriverDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const { data: driver } = await supabase.from("profiles").select("*").eq("id", params.id).single();
-  const { data: licence } = await supabase.from("driver_licences").select("*").eq("driver_id", params.id).maybeSingle();
-  const { data: trips } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("driver_id", params.id)
-    .eq("status", "completed")
-    .order("start_datetime", { ascending: false });
+  // All three only need params.id, and none depends on another's result.
+  const [{ data: driver }, { data: licence }, { data: trips }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", params.id).single(),
+    supabase.from("driver_licences").select("*").eq("driver_id", params.id).maybeSingle(),
+    supabase
+      .from("vehicle_usage")
+      .select("*, vehicle:vehicles(name)")
+      .eq("driver_id", params.id)
+      .eq("status", "completed")
+      .order("start_datetime", { ascending: false }),
+  ]);
 
   if (!driver) {
     return <p className="text-sm text-steel">Driver not found.</p>;

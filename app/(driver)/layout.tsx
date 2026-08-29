@@ -24,11 +24,11 @@ export default async function DriverLayout({ children }: { children: React.React
     <div className="min-h-screen pb-20">
       {/* The full driver welcome tour (its "Home"/"Start a trip" steps
           target path "/", which now redirects admins straight to
-          /admin) doesn't make sense for an admin anyway — they get their
-          own tour, launched from the admin dashboard. Auto-starting this
-          one for an admin's first visit to /scan or /trips used to leave
-          the tooltip stuck on-screen with nothing to highlight and
-          bounce back to /admin on every "Next". */}
+          /admin unless "?as=driver" is present) doesn't make sense for an
+          admin anyway — they get their own tour, launched from the admin
+          dashboard. Auto-starting this one for an admin's first visit to
+          /scan or /trips used to leave the tooltip stuck on-screen with
+          nothing to highlight and bounce back to /admin on every "Next". */}
       {!isAdmin && <TourLauncher steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />}
       {isAdmin && (
         <div className="flex items-center justify-between border-b border-steel/20 bg-ink px-4 py-4">
@@ -42,7 +42,7 @@ export default async function DriverLayout({ children }: { children: React.React
         </div>
       )}
       <main className="mx-auto max-w-lg px-4 py-6">{children}</main>
-      <DriverNav />
+      <DriverNav asDriver={isAdmin} />
     </div>
   );
 }

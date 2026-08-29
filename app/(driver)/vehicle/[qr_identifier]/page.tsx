@@ -7,15 +7,18 @@ import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 
 export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { data: vehicle } = await supabase
-    .from("vehicles")
-    .select("*")
-    .eq("qr_identifier", params.qr_identifier)
-    .single();
+  // These two don't depend on each other — run them together instead of
+  // waiting for the user lookup before even starting the vehicle lookup.
+  const [
+    {
+      data: { user },
+    },
+    { data: vehicle },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("vehicles").select("*").eq("qr_identifier", params.qr_identifier).single(),
+  ]);
 
   if (!vehicle || !vehicle.active) {
     return (
@@ -25,9 +28,64 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
     );
   }
 
-  const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
+  // Everything below only needs vehicle.id / user.id, both already known —
+  // none of these five depend on each other's result, so they used to run
+  // as five separate round trips one after another (the whole reason
+  // scanning a QR code felt slow). Firing them together turns that into
+  // one round trip's worth of wall-clock time.
+  const nowIso = new Date().toISOString();
+  const wantsComplianceCheckToday = isComplianceCheckDayNZ();
+
+  const [
+    { data: profile },
+    features,
+    { data: activeTrip },
+    { data: myActiveElsewhere },
+    { data: reservedBooking },
+    { data: todaysChecks },
+  ] = await Promise.all([
+    supabase.from("profiles").select("name, role").eq("id", user!.id).single(),
+    getViewerFeatures(supabase, user!.id),
+    supabase
+      .from("vehicle_usage")
+      .select("*, driver:profiles(name)")
+      .eq("vehicle_id", vehicle.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("vehicle_usage")
+      .select("*, vehicle:vehicles(name)")
+      .eq("driver_id", user!.id)
+      .eq("status", "active")
+      .neq("vehicle_id", vehicle.id)
+      .maybeSingle(),
+    // Only an APPROVED booking reserves the vehicle — a pending request
+    // never blocks anyone, per the approval workflow.
+    supabase
+      .from("bookings")
+      .select("*, driver:profiles(name)")
+      .eq("vehicle_id", vehicle.id)
+      .eq("approval_status", "approved")
+      .in("booking_status", ["upcoming", "active"])
+      .lte("start_datetime", nowIso)
+      .gte("end_datetime", nowIso)
+      .maybeSingle(),
+    // Fetched unconditionally alongside everything else (cheap, and its
+    // own result isn't needed to decide whether to run it) — only used
+    // below if this org actually has Vehicle Checks turned on.
+    wantsComplianceCheckToday
+      ? supabase
+          .from("vehicle_checks")
+          .select("created_at")
+          .eq("vehicle_id", vehicle.id)
+          .eq("driver_id", user!.id)
+          .eq("check_type", "pre")
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: null as { created_at: string }[] | null }),
+  ]);
+
   const isAdmin = profile?.role === "admin";
-  const features = await getViewerFeatures(supabase, user!.id);
 
   // Compulsory pre-operation check on Mondays and Fridays — a driver's
   // first scan of this vehicle on one of those days must be preceded by
@@ -36,45 +94,9 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
   // there'd be no way to satisfy it. startTrip() in actions.ts enforces
   // the same rule server-side; this is what drives the actual UI.
   let needsComplianceCheck = false;
-  if (features.vehicle_checks && isComplianceCheckDayNZ()) {
-    const { data: todaysChecks } = await supabase
-      .from("vehicle_checks")
-      .select("created_at")
-      .eq("vehicle_id", vehicle.id)
-      .eq("driver_id", user!.id)
-      .eq("check_type", "pre")
-      .order("created_at", { ascending: false })
-      .limit(5);
+  if (features.vehicle_checks && wantsComplianceCheckToday) {
     needsComplianceCheck = !(todaysChecks ?? []).some((c) => isTodayNZ(c.created_at));
   }
-
-  const { data: activeTrip } = await supabase
-    .from("vehicle_usage")
-    .select("*, driver:profiles(name)")
-    .eq("vehicle_id", vehicle.id)
-    .eq("status", "active")
-    .maybeSingle();
-
-  const { data: myActiveElsewhere } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name)")
-    .eq("driver_id", user!.id)
-    .eq("status", "active")
-    .neq("vehicle_id", vehicle.id)
-    .maybeSingle();
-
-  // Only an APPROVED booking reserves the vehicle — a pending request
-  // never blocks anyone, per the approval workflow.
-  const nowIso = new Date().toISOString();
-  const { data: reservedBooking } = await supabase
-    .from("bookings")
-    .select("*, driver:profiles(name)")
-    .eq("vehicle_id", vehicle.id)
-    .eq("approval_status", "approved")
-    .in("booking_status", ["upcoming", "active"])
-    .lte("start_datetime", nowIso)
-    .gte("end_datetime", nowIso)
-    .maybeSingle();
 
   if (activeTrip && activeTrip.driver_id !== user!.id) {
     return (

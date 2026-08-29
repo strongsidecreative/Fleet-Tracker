@@ -1,0 +1,10 @@
+id,check_id,item_key,item_label,result,comment,photo_url,created_at
+1459ae0f-899a-4a7b-b4ad-cedd0bde9674,a360b37e-7288-48c4-8531-843186107bdc,fuel_card,Fuel Card,ok,,,2026-08-19 23:17:08.607139+00
+43898d93-08ee-4af3-8029-418acb0c1ffe,a360b37e-7288-48c4-8531-843186107bdc,spare_tyre_condition,Spare Tyre Condition,ok,,,2026-08-19 23:17:07.497091+00
+70b14df9-6a1e-4552-a5f7-3abfaf464924,a360b37e-7288-48c4-8531-843186107bdc,vehicle_manual,Vehicle Manual,ok,,,2026-08-19 23:17:08.053077+00
+86349fd5-b874-4328-b53d-bccdab86add3,a360b37e-7288-48c4-8531-843186107bdc,exterior_condition,Exterior Condition,ok,,,2026-08-19 23:17:08.904503+00
+b1214d0c-8d8a-431e-a9b1-fedf631621b7,a360b37e-7288-48c4-8531-843186107bdc,logbook,Logbook,ok,,,2026-08-19 23:17:08.323305+00
+b929e56b-339c-42dd-82ac-2b28d2f5d6f8,a360b37e-7288-48c4-8531-843186107bdc,jack_and_tools,Jack and Tools,issue,cant find,,2026-08-19 23:17:07.785527+00
+bf92df6f-48c4-40ca-ad0f-ea130509af15,a360b37e-7288-48c4-8531-843186107bdc,interior_condition,Interior Condition,ok,,,2026-08-19 23:17:09.72517+00
+c642bd05-0278-40ea-aad9-afa9cef455f0,a360b37e-7288-48c4-8531-843186107bdc,spare_tyre,Spare Tyre,ok,,,2026-08-19 23:17:07.22059+00
+da84cb12-62d7-42b4-a773-fd30189031db,a360b37e-7288-48c4-8531-843186107bdc,first_aid_kit,First Aid Kit,ok,,,2026-08-19 23:17:06.935238+00

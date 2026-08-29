@@ -42,11 +42,13 @@ export default function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-ink">
-            <span className="h-6 w-6 rounded-full border-4 border-brandLight" />
-          </div>
-          <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-ink">Fleet</h1>
-          <p className="text-xs font-medium uppercase tracking-[0.3em] text-brand">— Tracker —</p>
+          <img
+            src="/icon-512.png"
+            alt="Fleet Tracker"
+            width={512}
+            height={512}
+            className="mx-auto h-24 w-24 rounded-2xl"
+          />
         </div>
 
         {justSetUp && (

@@ -11,7 +11,12 @@ const items = [
   { href: "/account", label: "Account", tourId: "nav-account" },
 ];
 
-export default function DriverNav() {
+// asDriver is true when an admin got here via "Switch to Driver" — the
+// Home tab needs to keep the "?as=driver" flag on every subsequent tap,
+// otherwise tapping Home mid-browse lands back on "/" with no flag and
+// immediately bounces to /admin (see app/(driver)/page.tsx). The other
+// four tabs aren't affected — only "/" itself has that redirect.
+export default function DriverNav({ asDriver = false }: { asDriver?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -21,11 +26,12 @@ export default function DriverNav() {
     >
       <ul className="flex justify-around">
         {items.map((item) => {
+          const href = asDriver && item.href === "/" ? "/?as=driver" : item.href;
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <li key={item.href} className="flex-1">
               <Link
-                href={item.href}
+                href={href}
                 data-tour={item.tourId}
                 className={`flex flex-col items-center gap-1 py-3 text-sm font-medium transition-colors ${
                   active ? "text-brandLight" : "text-paper/70"

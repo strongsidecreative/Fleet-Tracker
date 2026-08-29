@@ -7,8 +7,10 @@ export default async function EditBookingPage({ params }: { params: { id: string
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: booking } = await supabase.from("bookings").select("*").eq("id", params.id).single();
-  const { data: vehicles } = await supabase.from("vehicles").select("id, name, registration").eq("active", true).order("name");
+  const [{ data: booking }, { data: vehicles }] = await Promise.all([
+    supabase.from("bookings").select("*").eq("id", params.id).single(),
+    supabase.from("vehicles").select("id, name, registration").eq("active", true).order("name"),
+  ]);
 
   if (!booking || booking.driver_id !== user!.id) {
     return <p className="text-sm text-steel">Booking not found.</p>;

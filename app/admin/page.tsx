@@ -1,8 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { overallSeverity, wofStatus, regoStatus, rucStatus, serviceStatus, SEVERITY_BADGE_CLASS, SEVERITY_LABEL } from "@/lib/vehicleAlerts";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
-import WeeklyKmChart from "@/components/WeeklyKmChart";
+
+// recharts (plus its own dependency tree) is one of the heaviest packages
+// in this app and was previously bundled into every admin dashboard
+// load even though it renders one chart. Loading it as its own chunk
+// keeps it out of the main dashboard bundle; the plain div below is what
+// shows for the instant before the chart chunk arrives (same visual slot
+// as the real chart, so nothing jumps around when it swaps in).
+const WeeklyKmChart = dynamic(() => import("@/components/WeeklyKmChart"), {
+  loading: () => <div className="h-56 w-full animate-pulse rounded-xl border border-steel/20 bg-white" />,
+});
 
 export default async function AdminDashboard({ searchParams }: { searchParams: { featureDisabled?: string } }) {
   const supabase = createClient();

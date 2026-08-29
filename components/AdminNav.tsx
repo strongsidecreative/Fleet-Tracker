@@ -111,7 +111,7 @@ export default function AdminNav({
           <div className="mt-1.5 flex items-center justify-between">
             <span className="rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
             <Link
-              href="/"
+              href="/?as=driver"
               className="rounded bg-brand px-2 py-1 text-xs font-semibold text-paper hover:opacity-90"
             >
               Switch to Driver
@@ -163,7 +163,7 @@ export default function AdminNav({
             <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-xs font-medium text-paper">Admin</span>
           </div>
           <Link
-            href="/"
+            href="/?as=driver"
             className="rounded bg-brand px-2.5 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
           >
             Switch to Driver

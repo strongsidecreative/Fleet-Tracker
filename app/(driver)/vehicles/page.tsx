@@ -3,24 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 export default async function VehiclesPage() {
   const supabase = createClient();
 
-  const { data: vehicles } = await supabase
-    .from("vehicles")
-    .select("*")
-    .eq("active", true)
-    .order("name");
-
-  const { data: activeTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, driver:profiles(name)")
-    .eq("status", "active");
-
   const nowIso = new Date().toISOString();
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("*, driver:profiles(name)")
-    .eq("status", "upcoming")
-    .gte("end_datetime", nowIso)
-    .order("start_datetime");
+  // None of these three depend on each other — fetch together.
+  const [{ data: vehicles }, { data: activeTrips }, { data: bookings }] = await Promise.all([
+    supabase.from("vehicles").select("*").eq("active", true).order("name"),
+    supabase.from("vehicle_usage").select("*, driver:profiles(name)").eq("status", "active"),
+    supabase
+      .from("bookings")
+      .select("*, driver:profiles(name)")
+      .eq("status", "upcoming")
+      .gte("end_datetime", nowIso)
+      .order("start_datetime"),
+  ]);
 
   const activeTripFor = (vehicleId: string) => activeTrips?.find((t) => t.vehicle_id === vehicleId);
   const nextBookingFor = (vehicleId: string) => bookings?.find((b) => b.vehicle_id === vehicleId);
@@ -39,7 +33,13 @@ export default async function VehiclesPage() {
               <div className="flex items-center justify-between gap-3">
                 {v.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.photo_url} alt={v.name} className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                  <img
+                    src={v.photo_url}
+                    alt={v.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
+                  />
                 ) : (
                   <div className="h-12 w-12 flex-shrink-0 rounded-lg bg-paper" />
                 )}

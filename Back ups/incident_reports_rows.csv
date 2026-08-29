@@ -1,0 +1,2 @@
+id,vehicle_id,driver_id,description,severity,photo_url,status,created_at,report_type,check_area,source_vehicle_check_item_id,created_by
+a29bf764-a3d5-40b8-9fb6-8b01f6817fda,542572db-5dbc-4470-b391-6b89b5c6c8ee,59d8e9b7-9032-432a-bc30-a84c1fecb0f9,dent in front,medium,,new,2026-08-14 09:22:15.982781+00,incident,,,

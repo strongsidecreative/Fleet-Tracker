@@ -4,11 +4,15 @@ import ApprovalActions from "./ApprovalActions";
 export default async function BookingApprovalPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const { data: booking } = await supabase
-    .from("bookings")
-    .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
-    .eq("id", params.id)
-    .single();
+  // Neither of these depends on the other's result — fetch together.
+  const [{ data: booking }, { data: vehicles }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
+      .eq("id", params.id)
+      .single(),
+    supabase.from("vehicles").select("id, name").eq("active", true).order("name"),
+  ]);
 
   if (!booking) {
     return <p className="text-sm text-steel">Booking not found.</p>;
@@ -23,8 +27,6 @@ export default async function BookingApprovalPage({ params }: { params: { id: st
       .order("start_datetime", { ascending: true });
     occurrences = data ?? [booking];
   }
-
-  const { data: vehicles } = await supabase.from("vehicles").select("id, name").eq("active", true).order("name");
 
   const isDecided = booking.approval_status !== "pending";
 

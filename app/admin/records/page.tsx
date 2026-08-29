@@ -17,20 +17,6 @@ export default async function AdminRecordsPage({
   const supabase = createClient();
   const { driverId, vehicleId, start, end, status } = searchParams;
 
-  const { data: drivers } = await supabase.from("profiles").select("id, name").eq("role", "driver").order("name");
-  const { data: vehicles } = await supabase.from("vehicles").select("id, name").order("name");
-
-  // Trips still marked active belong at the top of this page, not on a
-  // separate "Sessions" tab — it's the same vehicle_usage table, and an
-  // admin looking at usage records is exactly who needs to notice one
-  // was left open. Always shown regardless of the filters below, so a
-  // stuck session never gets hidden by an unrelated date range.
-  const { data: openSessions } = await supabase
-    .from("vehicle_usage")
-    .select("*, vehicle:vehicles(name), driver:profiles(name)")
-    .eq("status", "active")
-    .order("start_datetime", { ascending: true });
-
   let query = supabase
     .from("vehicle_usage")
     .select("*, vehicle:vehicles(name), driver:profiles(name)")
@@ -43,7 +29,24 @@ export default async function AdminRecordsPage({
   if (start) query = query.gte("start_datetime", `${start}T00:00:00`);
   if (end) query = query.lte("start_datetime", `${end}T23:59:59`);
 
-  const { data: trips } = await query;
+  // None of these four depend on each other — the filter dropdowns, the
+  // always-shown open-sessions list, and the filtered table all fetch
+  // together instead of one after another.
+  const [{ data: drivers }, { data: vehicles }, { data: openSessions }, { data: trips }] = await Promise.all([
+    supabase.from("profiles").select("id, name").eq("role", "driver").order("name"),
+    supabase.from("vehicles").select("id, name").order("name"),
+    // Trips still marked active belong at the top of this page, not on a
+    // separate "Sessions" tab — it's the same vehicle_usage table, and an
+    // admin looking at usage records is exactly who needs to notice one
+    // was left open. Always shown regardless of the filters below, so a
+    // stuck session never gets hidden by an unrelated date range.
+    supabase
+      .from("vehicle_usage")
+      .select("*, vehicle:vehicles(name), driver:profiles(name)")
+      .eq("status", "active")
+      .order("start_datetime", { ascending: true }),
+    query,
+  ]);
 
   const exportParams = new URLSearchParams();
   if (driverId) exportParams.set("driverId", driverId);

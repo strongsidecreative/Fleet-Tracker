@@ -19,8 +19,11 @@ module.exports = {
         rust: "#D64545",       // status only: errors, odometer rejection
       },
       fontFamily: {
-        display: ["'Space Grotesk'", "sans-serif"],
-        body: ["Inter", "sans-serif"],
+        // Backed by next/font/google in app/layout.tsx (self-hosted at
+        // build time) rather than a runtime Google Fonts request — see
+        // the comment in app/globals.css.
+        display: ["var(--font-display)", "sans-serif"],
+        body: ["var(--font-body)", "sans-serif"],
       },
       fontFeatureSettings: {
         tabular: '"tnum"',

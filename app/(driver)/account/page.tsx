@@ -11,17 +11,10 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("name, email, role")
-    .eq("id", user!.id)
-    .single();
-
-  const { data: licence } = await supabase
-    .from("driver_licences")
-    .select("*")
-    .eq("driver_id", user!.id)
-    .maybeSingle();
+  const [{ data: profile }, { data: licence }] = await Promise.all([
+    supabase.from("profiles").select("name, email, role").eq("id", user!.id).single(),
+    supabase.from("driver_licences").select("*").eq("driver_id", user!.id).maybeSingle(),
+  ]);
 
   return (
     <div className="space-y-4">

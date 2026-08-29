@@ -6,11 +6,10 @@ import SuccessBanner from "@/components/SuccessBanner";
 export default async function AdminVehiclesPage() {
   const supabase = createClient();
 
-  const { data: vehicles } = await supabase.from("vehicles").select("*").order("name");
-  const { data: activeTrips } = await supabase
-    .from("vehicle_usage")
-    .select("*, driver:profiles(name)")
-    .eq("status", "active");
+  const [{ data: vehicles }, { data: activeTrips }] = await Promise.all([
+    supabase.from("vehicles").select("*").order("name"),
+    supabase.from("vehicle_usage").select("*, driver:profiles(name)").eq("status", "active"),
+  ]);
 
   const activeTripFor = (vehicleId: string) => activeTrips?.find((t) => t.vehicle_id === vehicleId);
 
@@ -49,7 +48,13 @@ export default async function AdminVehiclesPage() {
               <div className="flex items-center justify-between gap-3">
                 {v.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.photo_url} alt={v.name} className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                  <img
+                    src={v.photo_url}
+                    alt={v.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
+                  />
                 ) : (
                   <div className="h-12 w-12 flex-shrink-0 rounded-lg bg-paper" />
                 )}

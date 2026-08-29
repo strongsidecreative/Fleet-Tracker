@@ -5,7 +5,11 @@ import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
-export default async function DriverDashboard({ searchParams }: { searchParams: { featureDisabled?: string } }) {
+export default async function DriverDashboard({
+  searchParams,
+}: {
+  searchParams: { featureDisabled?: string; as?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -18,7 +22,13 @@ export default async function DriverDashboard({ searchParams }: { searchParams: 
   // already-active session) lands here directly rather than going
   // through the login form's role-based redirect. Send them on to the
   // admin dashboard instead of showing the driver home screen.
-  if (profile?.role === "admin") {
+  //
+  // The one deliberate exception is "?as=driver" — that's what AdminNav's
+  // "Switch to Driver" button links to (and what DriverNav's own Home tab
+  // then keeps linking to while browsing as a driver). Without this
+  // escape hatch that button just bounced straight back to /admin, since
+  // it landed on this exact page.
+  if (profile?.role === "admin" && searchParams.as !== "driver") {
     redirect("/admin");
   }
 
