@@ -20,10 +20,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "My Driving",
-    items: [
-      { href: "/scan", label: "Scan Vehicle", tourId: "nav-admin-scan", match: (p) => p === "/scan" },
-      { href: "/trips", label: "My Trips", tourId: "nav-admin-mytrips", match: (p) => p === "/trips" },
-    ],
+    items: [{ href: "/trips", label: "My Trips", tourId: "nav-admin-mytrips" }],
   },
   {
     label: "Fleet",
@@ -31,7 +28,7 @@ const groups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/vehicles", label: "Vehicles", tourId: "nav-admin-vehicles" },
       {
         href: "/admin/people",
-        label: "People",
+        label: "Drivers",
         tourId: "nav-admin-people",
         match: (p) => p.startsWith("/admin/people") || p.startsWith("/admin/drivers") || p.startsWith("/admin/admins"),
       },
@@ -62,9 +59,11 @@ const groups: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-// The 4 always-visible mobile tabs. Everything else (including these
-// four's less-frequent siblings, like My Trips) lives behind "More".
-const PINNED_HREFS = ["/admin", "/admin/bookings", "/admin/vehicles", "/scan"];
+// The 4 always-visible mobile tabs. Everything else (including My Trips
+// and Bookings) lives behind "More". Scan Vehicle isn't an admin tab at
+// all any more — an admin switches to driver mode ("Switch to Driver")
+// to scan, same as any other driver.
+const PINNED_HREFS = ["/admin", "/admin/people", "/admin/vehicles", "/admin/notifications"];
 
 function isActive(item: NavItem, pathname: string) {
   return item.match ? item.match(pathname) : pathname.startsWith(item.href);
@@ -92,14 +91,17 @@ export default function AdminNav({
 
   const allItems = visibleGroups.flatMap((g) => g.items);
   const pinned = PINNED_HREFS.map((href) => allItems.find((i) => i.href === href)).filter(Boolean) as NavItem[];
-  // My Trips is handled as its own standalone link above these groups
-  // (no longer worth a whole "My Driving" section now that Scan Vehicle
-  // is pinned) — exclude both it and the now-empty Overview group here so
-  // it doesn't also show up a second time under a group heading.
+  // Overview only ever contains Dashboard, which is always pinned — drop
+  // the now-empty group so it doesn't render a heading with nothing under it.
   const moreGroups = visibleGroups
     .map((g) => ({ ...g, items: g.items.filter((i) => !PINNED_HREFS.includes(i.href)) }))
-    .filter((g) => g.items.length > 0 && g.label !== "Overview" && g.label !== "My Driving");
+    .filter((g) => g.items.length > 0 && g.label !== "Overview");
   const moreIsActive = pathname === "/trips" || moreGroups.some((g) => g.items.some((i) => isActive(i, pathname)));
+  // Bookings is no longer pinned, so its pending-approval count would
+  // otherwise vanish from the mobile view — surface it as a dot on
+  // "More" instead. Notifications gets its own dot on its own pinned tab
+  // below, so it doesn't also need to flag "More".
+  const moreHasAlert = pendingCount > 0;
 
   return (
     <>
@@ -183,10 +185,11 @@ export default function AdminNav({
                   aria-current={active ? "page" : undefined}
                 >
                   {item.label}
-                  {item.href === "/admin/bookings" && pendingCount > 0 && (
-                    <span className="absolute right-3 top-1 rounded-full bg-rust px-1.5 py-0.5 text-[10px] font-bold text-paper">
-                      {pendingCount}
-                    </span>
+                  {item.href === "/admin/notifications" && unreadCount > 0 && (
+                    <span
+                      className="absolute right-3 top-1 h-2 w-2 rounded-full bg-rust"
+                      aria-label="Unread notifications"
+                    />
                   )}
                 </Link>
               </li>
@@ -204,8 +207,8 @@ export default function AdminNav({
               aria-expanded={moreOpen}
             >
               More
-              {unreadCount > 0 && (
-                <span className="absolute right-4 top-1.5 h-2 w-2 rounded-full bg-rust" aria-label="Unread notifications" />
+              {moreHasAlert && (
+                <span className="absolute right-4 top-1.5 h-2 w-2 rounded-full bg-rust" aria-label="Pending items" />
               )}
             </button>
           </li>
@@ -227,19 +230,6 @@ export default function AdminNav({
                 Close
               </button>
             </div>
-            <ul className="mb-3">
-              <li>
-                <Link
-                  href="/trips"
-                  data-tour="nav-admin-mytrips"
-                  className={`block rounded px-3 py-2 text-sm font-medium ${
-                    pathname === "/trips" ? "bg-brand text-paper" : "text-paper/80 hover:bg-steel/30"
-                  }`}
-                >
-                  My Trips
-                </Link>
-              </li>
-            </ul>
             {moreGroups.map((group) => (
               <div key={group.label} className="mb-3">
                 <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-paper/40">{group.label}</p>
@@ -256,8 +246,8 @@ export default function AdminNav({
                           }`}
                         >
                           {item.label}
-                          {item.href === "/admin/notifications" && unreadCount > 0 && (
-                            <span className="ml-2 rounded-full bg-rust px-1.5 py-0.5 text-xs font-bold text-paper">{unreadCount}</span>
+                          {item.href === "/admin/bookings" && pendingCount > 0 && (
+                            <span className="ml-2 rounded-full bg-rust px-1.5 py-0.5 text-xs font-bold text-paper">{pendingCount}</span>
                           )}
                         </Link>
                       </li>

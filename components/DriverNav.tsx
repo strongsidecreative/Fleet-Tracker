@@ -20,10 +20,7 @@ export default function DriverNav({ asDriver = false }: { asDriver?: boolean }) 
   const pathname = usePathname();
 
   return (
-    <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-steel/20 bg-ink text-paper"
-      aria-label="Primary"
-    >
+    <nav className="border-b border-steel/20 bg-ink text-paper" aria-label="Primary">
       <ul className="flex justify-around">
         {items.map((item) => {
           const href = asDriver && item.href === "/" ? "/?as=driver" : item.href;

@@ -21,7 +21,7 @@ export default async function DriverLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen">
       {/* The full driver welcome tour (its "Home"/"Start a trip" steps
           target path "/", which now redirects admins straight to
           /admin unless "?as=driver" is present) doesn't make sense for an
@@ -30,19 +30,22 @@ export default async function DriverLayout({ children }: { children: React.React
           /scan or /trips used to leave the tooltip stuck on-screen with
           nothing to highlight and bounce back to /admin on every "Next". */}
       {!isAdmin && <TourLauncher steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />}
-      {isAdmin && (
-        <div className="flex items-center justify-between border-b border-steel/20 bg-ink px-4 py-4">
-          <span className="font-display text-lg font-bold uppercase tracking-wide text-paper">Fleet Tracker</span>
+      {/* Header + tabs both sit up top in normal document flow now,
+          instead of a fixed bottom tab bar — consistent with the admin
+          nav layout. */}
+      <div className="flex items-center justify-between border-b border-steel/20 bg-ink px-4 py-4">
+        <span className="font-display text-lg font-bold uppercase tracking-wide text-paper">Fleet Tracker</span>
+        {isAdmin && (
           <Link
             href="/admin"
             className="rounded bg-brand px-2.5 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
           >
             Switch to Admin
           </Link>
-        </div>
-      )}
-      <main className="mx-auto max-w-lg px-4 py-6">{children}</main>
+        )}
+      </div>
       <DriverNav asDriver={isAdmin} />
+      <main className="mx-auto max-w-lg px-4 py-6">{children}</main>
     </div>
   );
 }
