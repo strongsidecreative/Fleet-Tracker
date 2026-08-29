@@ -32,6 +32,17 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAdminRoute = path.startsWith("/admin") || path.startsWith("/api/admin");
+  // "/" is the PWA's install start_url, so an admin opening the app from
+  // their home-screen icon (or a stale bookmark, or an already-active
+  // session) should land on the admin dashboard, not the driver home
+  // screen. This used to be handled inside app/(driver)/page.tsx itself,
+  // but that meant the (driver) layout's header + tabs had already
+  // rendered and streamed to the browser (loading.tsx lets that happen
+  // instantly, ahead of the page's own data/redirect) before the
+  // redirect fired — a visible flash of the wrong header/tabs on every
+  // admin app-open. Doing it here, in middleware, issues a real HTTP
+  // redirect before any HTML is sent, so nothing ever flashes.
+  const isRootAdminRedirectCandidate = path === "/" && request.nextUrl.searchParams.get("as") !== "driver";
   const isProtectedRoute =
     isAdminRoute ||
     path === "/" ||
@@ -72,7 +83,7 @@ export async function middleware(request: NextRequest) {
   // so a disabled feature is blocked here too — not just hidden from nav
   // — whether it's a page load or a Server Action posted to the same
   // route.
-  if (user && (isAdminRoute || requiredFeature)) {
+  if (user && (isAdminRoute || requiredFeature || isRootAdminRedirectCandidate)) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active, organisation:organisations(features)")
@@ -88,6 +99,10 @@ export async function middleware(request: NextRequest) {
       if (profile.role !== "admin") {
         return NextResponse.redirect(new URL("/", request.url));
       }
+    }
+
+    if (isRootAdminRedirectCandidate && profile?.role === "admin") {
+      return NextResponse.redirect(new URL("/admin", request.url));
     }
 
     if (requiredFeature && profile) {

@@ -17,17 +17,13 @@ export default async function DriverDashboard({
 
   const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
 
-  // "/" is the PWA's install start_url, so an admin who opens the app
-  // from their home-screen icon (or a stale bookmark, or an
-  // already-active session) lands here directly rather than going
-  // through the login form's role-based redirect. Send them on to the
-  // admin dashboard instead of showing the driver home screen.
-  //
-  // The one deliberate exception is "?as=driver" — that's what AdminNav's
-  // "Switch to Driver" button links to (and what DriverNav's own Home tab
-  // then keeps linking to while browsing as a driver). Without this
-  // escape hatch that button just bounced straight back to /admin, since
-  // it landed on this exact page.
+  // middleware.ts now redirects an admin hitting "/" (the PWA's install
+  // start_url) straight to /admin before any HTML renders — that's what
+  // stops the driver header/tabs from flashing on an admin's app-open.
+  // This check stays here too, purely as a fallback for any edge case
+  // that reaches this page anyway (e.g. profile role changing between
+  // middleware's query and this one). Same "?as=driver" escape hatch as
+  // middleware, for AdminNav's "Switch to Driver" button.
   if (profile?.role === "admin" && searchParams.as !== "driver") {
     redirect("/admin");
   }

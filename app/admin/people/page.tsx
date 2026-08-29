@@ -140,8 +140,8 @@ export default async function AdminPeoplePage({
           </a>
         </div>
       </div>
-      <div className="space-y-2">
-        {drivers?.map((d) => {
+      {(() => {
+        const DriverRow = ({ d }: { d: NonNullable<typeof drivers>[number] }) => {
           const trips = allTrips?.filter((t) => t.driver_id === d.id) ?? [];
           const weekKm = trips.filter((t) => new Date(t.start_datetime) >= weekStart).reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
           const monthKm = trips.filter((t) => new Date(t.start_datetime) >= monthStart).reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
@@ -151,7 +151,7 @@ export default async function AdminPeoplePage({
           const severity = licence ? licenceSeverity(licence.expiry_date) : null;
 
           return (
-            <div key={d.id} className="rounded-xl border border-steel/20 bg-white p-3">
+            <div className="rounded-xl border border-steel/20 bg-white p-3">
               <div className="flex items-center justify-between">
                 <Link href={`/admin/drivers/${d.id}`} className="flex-1">
                   <p className="font-medium text-ink">
@@ -224,13 +224,47 @@ export default async function AdminPeoplePage({
               </div>
             </div>
           );
-        })}
-        {(!drivers || drivers.length === 0) && (
-          <p className="rounded-xl border border-steel/20 bg-white p-4 text-sm text-steel">
-            No drivers yet. Use "Add Driver" above to invite your first one.
-          </p>
-        )}
-      </div>
+        };
+
+        // Split into three groups instead of one flat list: a driver
+        // that's been deactivated is very different from one who's just
+        // never signed in yet (pending invite), and both are different
+        // from someone actively driving — mixing them together made it
+        // easy to miss a stale invite buried among active drivers.
+        const activeDrivers = (drivers ?? []).filter((d) => d.active && !pendingIds.has(d.id));
+        const pendingDrivers = (drivers ?? []).filter((d) => d.active && pendingIds.has(d.id));
+        const inactiveDrivers = (drivers ?? []).filter((d) => !d.active);
+
+        const Section = ({ title, list }: { title: string; list: typeof activeDrivers }) =>
+          list.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-steel">
+                {title} ({list.length})
+              </p>
+              <div className="space-y-2">
+                {list.map((d) => (
+                  <DriverRow key={d.id} d={d} />
+                ))}
+              </div>
+            </div>
+          ) : null;
+
+        if (!drivers || drivers.length === 0) {
+          return (
+            <p className="rounded-xl border border-steel/20 bg-white p-4 text-sm text-steel">
+              No drivers yet. Use "Add Driver" above to invite your first one.
+            </p>
+          );
+        }
+
+        return (
+          <div className="space-y-5">
+            <Section title="Active" list={activeDrivers} />
+            <Section title="Pending" list={pendingDrivers} />
+            <Section title="Inactive" list={inactiveDrivers} />
+          </div>
+        );
+      })()}
     </div>
   );
 }
