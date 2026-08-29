@@ -16,3 +16,8 @@ out/
 npm-debug.log*
 
 .vercel
+
+# Client data — never commit
+Back ups/
+Client Onboarding PDFs/
+Supabase Snippet Untitled query.csv
