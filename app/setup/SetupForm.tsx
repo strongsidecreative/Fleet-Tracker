@@ -16,7 +16,7 @@ function SubmitButton() {
   );
 }
 
-export default function SetupForm() {
+export default function SetupForm({ token }: { token?: string }) {
   const [state, formAction] = useFormState(setupOrganisation, { error: null });
 
   return (
@@ -37,6 +37,7 @@ export default function SetupForm() {
         </div>
 
         <form action={formAction} className="space-y-4">
+          <input type="hidden" name="token" value={token ?? ""} />
           <div>
             <label htmlFor="organisationName" className="mb-1 block text-sm font-medium text-ink">
               Organisation Name

@@ -91,6 +91,16 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
         </p>
       )}
 
+      {(!vehicles || vehicles.length === 0) && (
+        <Link
+          href="/admin/vehicles/new"
+          className="flex items-center justify-between rounded-xl border border-brand/40 bg-brand/10 p-3"
+        >
+          <span className="text-sm font-semibold text-brand">Add your first vehicle to get started</span>
+          <span className="text-xs text-brand underline">Add Vehicle</span>
+        </Link>
+      )}
+
       {!!unreadCount && unreadCount > 0 && (
         <Link
           href="/admin/notifications"

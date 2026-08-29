@@ -11,12 +11,12 @@ type ActionState = { error: string | null };
  * every visit creates a fresh organisation, so there's no "already
  * complete" lock to check on page load any more.
  *
- * That's a deliberate trade-off: this link has no secret token, so its
- * safety relies entirely on you sending it privately to each new client
- * rather than publishing it anywhere. Anyone who has the link can create
- * an organisation. If that link ever leaks or gets shared more broadly
- * than intended, a SETUP_TOKEN-gated version is a natural next step —
- * not built here, since it wasn't asked for.
+ * Optionally gated by SETUP_TOKEN: if that env var is set, the link must
+ * be visited as /setup?token=<value> or submission is refused — set it
+ * (and share /setup?token=<value> instead of the bare link) any time this
+ * needs to be more than "private because nobody else has the URL". Unset,
+ * this behaves exactly as before: safety rests entirely on the link being
+ * sent privately to each new client rather than published anywhere.
  */
 export async function setupOrganisation(prevState: ActionState, formData: FormData): Promise<ActionState> {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -24,6 +24,13 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
       error:
         "The service role key isn't set up yet. Add SUPABASE_SERVICE_ROLE_KEY to .env.local (see README), then restart the server.",
     };
+  }
+
+  if (process.env.SETUP_TOKEN) {
+    const token = (formData.get("token") as string) ?? "";
+    if (token !== process.env.SETUP_TOKEN) {
+      return { error: "This setup link is invalid or has expired. Check the link with whoever sent it to you." };
+    }
   }
 
   const organisationName = (formData.get("organisationName") as string)?.trim();

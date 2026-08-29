@@ -4,6 +4,6 @@ import SetupForm from "./SetupForm";
 // can't be statically prerendered during `next build`.
 export const dynamic = "force-dynamic";
 
-export default function SetupPage() {
-  return <SetupForm />;
+export default function SetupPage({ searchParams }: { searchParams: { token?: string } }) {
+  return <SetupForm token={searchParams.token} />;
 }

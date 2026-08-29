@@ -307,6 +307,10 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
         <p>That link lands them directly on this page — benefits, install steps for their phone or computer, and a button to sign in with the password they just set.</p>
       </li>
       <li>
+        <strong>Add your vehicles and print their QR codes</strong>
+        <p>Add Vehicle for each one, then print or download its QR code and tape it inside the vehicle. This is the one physical step — do it before inviting drivers, so the code's already waiting on the vehicle the first time someone scans in.</p>
+      </li>
+      <li>
         <strong>They invite the rest of the team</strong>
         <p>From inside the app, the admin adds admins and drivers. Each person gets an emailed link that takes them to their own Admin or Driver Guide — benefits, install steps, and a sign-in button — before they ever touch the app itself.</p>
       </li>

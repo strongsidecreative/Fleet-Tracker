@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { toggleUserActive } from "../users/actions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { toggleUserActive, resendInvite } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
@@ -16,6 +17,19 @@ export default async function AdminPeoplePage({
 }) {
   const role = searchParams.role === "admin" ? "admin" : "driver";
   const supabase = createClient();
+
+  // A profile row is created the moment someone's invited, before they've
+  // ever opened the email — so on its own it can't tell "invited, still
+  // pending" apart from "actually using the app". last_sign_in_at (null
+  // until their first real sign-in) is the one signal that can. One admin
+  // call for the whole org rather than per-row, since this page can list
+  // dozens of people. If the service role key isn't set up, this silently
+  // falls back to showing no one as pending rather than breaking the page.
+  let pendingIds = new Set<string>();
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { data: userList } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
+    pendingIds = new Set((userList?.users ?? []).filter((u) => !u.last_sign_in_at).map((u) => u.id));
+  }
 
   const TabLink = ({ value, label }: { value: string; label: string }) => (
     <Link
@@ -51,19 +65,33 @@ export default async function AdminPeoplePage({
                   {a.name} {!a.active && <span className="text-xs text-steel">(inactive)</span>}
                 </p>
                 <p className="text-xs text-steel">{a.email}</p>
+                {a.active && pendingIds.has(a.id) && (
+                  <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
+                    Invite pending
+                  </span>
+                )}
               </div>
-              <form action={toggleUserActive.bind(null, a.id, !a.active)}>
-                <ConfirmSubmitButton
-                  confirmMessage={
-                    a.active
-                      ? `Deactivate ${a.name}? They won't be able to log in until reactivated.`
-                      : `Reactivate ${a.name}?`
-                  }
-                  className="text-xs font-medium text-steel underline"
-                >
-                  {a.active ? "Deactivate" : "Reactivate"}
-                </ConfirmSubmitButton>
-              </form>
+              <div className="flex items-center gap-3">
+                {a.active && pendingIds.has(a.id) && (
+                  <form action={resendInvite.bind(null, a.email, "admin")}>
+                    <button type="submit" className="text-xs font-medium text-brand underline">
+                      Resend invite
+                    </button>
+                  </form>
+                )}
+                <form action={toggleUserActive.bind(null, a.id, !a.active)}>
+                  <ConfirmSubmitButton
+                    confirmMessage={
+                      a.active
+                        ? `Deactivate ${a.name}? They won't be able to log in until reactivated.`
+                        : `Reactivate ${a.name}?`
+                    }
+                    className="text-xs font-medium text-steel underline"
+                  >
+                    {a.active ? "Deactivate" : "Reactivate"}
+                  </ConfirmSubmitButton>
+                </form>
+              </div>
             </div>
           ))}
           {(!admins || admins.length === 0) && (
@@ -129,6 +157,11 @@ export default async function AdminPeoplePage({
                   <p className="mt-0.5 text-xs text-steel">
                     {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
                   </p>
+                  {d.active && pendingIds.has(d.id) && (
+                    <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
+                      Invite pending
+                    </span>
+                  )}
                 </Link>
                 <div className="flex items-center gap-2">
                   {severity && (
@@ -140,6 +173,13 @@ export default async function AdminPeoplePage({
                     <span className="rounded-full bg-amber/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber">
                       In {active.vehicle?.name}
                     </span>
+                  )}
+                  {d.active && pendingIds.has(d.id) && (
+                    <form action={resendInvite.bind(null, d.email, "driver")}>
+                      <button type="submit" className="text-xs font-medium text-brand underline">
+                        Resend invite
+                      </button>
+                    </form>
                   )}
                   <form action={toggleUserActive.bind(null, d.id, !d.active)}>
                     <ConfirmSubmitButton
