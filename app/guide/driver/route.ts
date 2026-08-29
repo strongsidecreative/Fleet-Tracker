@@ -254,45 +254,6 @@ code{background:var(--ink-3);padding:2px 6px;border-radius:5px;font-size:0.9em;c
 </div>
 
 
-<section class="block" id="driver-guide">
-  <div class="wrap">
-    <div class="eyebrow">User Guide</div>
-    <h2>Driver Guide</h2>
-    <p class="section-intro">Log in and a guided tour walks you through each of these hands-on the first time. This is the quick-reference version, for before you've logged in or for looking something up later.</p>
-
-    <details open>
-      <summary>Starting and finishing a trip</summary>
-      <div class="guide-body"><p>Tap "Scan Vehicle QR" on your dashboard, or the Scan tab, and point your camera at the code taped to the vehicle, then enter the current odometer reading to start. Scan the same code again when you're done and enter the finishing reading; Fleet Tracker works out the kilometres automatically. If the vehicle is reserved by someone else's approved booking, scanning will flag that. An admin can override it if there's a genuine reason to proceed, and it's logged either way.</p></div>
-    </details>
-    <details>
-      <summary>My Trips</summary>
-      <div class="guide-body"><p>A full history of your completed trips, with start/end odometer readings and kilometres used for each.</p></div>
-    </details>
-    <details>
-      <summary>Vehicles</summary>
-      <div class="guide-body"><p>A read-only list of every active vehicle and whether it's currently available or in use.</p></div>
-    </details>
-    <details>
-      <summary>Booking a vehicle</summary>
-      <div class="guide-body"><p>Go to Book a Vehicle, fill in a purpose, pick a specific vehicle or tick "Any vehicle, let the admin assign one," a date and start/end time, and choose which admin should approve it. Tick "This is a recurring booking" to repeat it weekly, fortnightly, or monthly. Submitting sends it to your chosen admin as pending; it doesn't reserve the vehicle until they approve it, and you'll be notified either way. Editing an already-approved booking's vehicle, date, or time sends it back to pending automatically.</p></div>
-    </details>
-    <details>
-      <summary>Vehicle Check</summary>
-      <div class="guide-body"><p>A standalone 9-item checklist, separate from the QR start/finish flow, for any time you want to formally record a vehicle's condition. Flag anything that needs attention with a mandatory comment and optional photo, then sign off with your initials. Past checks are visible under "My History."</p></div>
-    </details>
-    <details>
-      <summary>Report an Incident</summary>
-      <div class="guide-body"><p>Use this for anything that happened during a trip that isn't a routine vehicle check — a bump, a mechanical issue, anything worth flagging to an admin directly.</p></div>
-    </details>
-    <details>
-      <summary>Account</summary>
-      <div class="guide-body"><p>Your name, email, and role; your driver licence details on file (read-only — contact an admin to update them); the push-notification "Turn on" toggle; and logout.</p></div>
-    </details>
-  </div>
-</section>
-
-
-
 <section class="block" id="install">
   <div class="wrap">
     <div class="eyebrow">Installation</div>
