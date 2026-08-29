@@ -184,11 +184,17 @@ export default async function AdminPeoplePage({
                       </button>
                     </form>
                   )}
-                  {/* Driver deactivation is one-way now (see deactivateDriverFromAdmin) —
-                      it also frees up their real email for a fresh invite, which the
-                      database can't cleanly undo, so there's no "Reactivate" once a
-                      driver has been deactivated. Their name and full history stay
-                      intact everywhere else in the app. */}
+                  {/* Driver deactivation is one-way going forward (see
+                      deactivateDriverFromAdmin) — it frees up their real email
+                      for a fresh invite as part of the same click, so there's
+                      normally no need to reactivate a driver afterwards.
+                      Reactivate is kept here only as a fallback for drivers
+                      who were deactivated the old way, before that email-freeing
+                      step existed — their email was never changed, so flipping
+                      them back to active restores their exact previous login.
+                      Reactivating a driver deactivated the new way is harmless
+                      but won't restore login, since their email/password were
+                      already replaced. */}
                   {d.active && (
                     <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
                       <ConfirmSubmitButton
@@ -196,6 +202,16 @@ export default async function AdminPeoplePage({
                         className="text-xs font-medium text-rust underline"
                       >
                         Deactivate
+                      </ConfirmSubmitButton>
+                    </form>
+                  )}
+                  {!d.active && (
+                    <form action={toggleUserActive.bind(null, d.id, true)}>
+                      <ConfirmSubmitButton
+                        confirmMessage={`Reactivate ${d.name}? Only do this if they were deactivated before the newer "free up their email" behaviour existed — otherwise their email has already been replaced and they still won't be able to log back in with it.`}
+                        className="text-xs font-medium text-brand underline"
+                      >
+                        Reactivate
                       </ConfirmSubmitButton>
                     </form>
                   )}
