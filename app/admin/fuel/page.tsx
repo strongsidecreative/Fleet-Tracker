@@ -76,7 +76,8 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
             <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 text-xs text-steel">
               <span>{l.driver?.name ?? "Unknown driver"}</span>
               <span>
-                {l.litres.toFixed(1)} L at {l.odometer_km.toLocaleString("en-NZ")} KM
+                {l.litres != null ? `${l.litres.toFixed(1)} L` : "No litres recorded"}
+                {l.odometer_km != null ? ` at ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
               </span>
               <span className="odometer font-bold text-ink">
                 {l.cost.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}

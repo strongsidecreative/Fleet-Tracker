@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
 import { fmtDate } from "@/lib/nz-time";
 
 export default async function MyFuelPage() {
@@ -21,11 +20,9 @@ export default async function MyFuelPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4">
         <h1 className="font-display text-xl font-bold text-ink">My Fuel</h1>
-        <Link href="/fuel/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
-          Log Fuel
-        </Link>
+        <p className="mt-1 text-xs text-steel">Add fuel from the Current Vehicle card while you have one checked out.</p>
       </div>
 
       {rows.length > 0 && (
@@ -53,7 +50,8 @@ export default async function MyFuelPage() {
             </div>
             <div className="mt-1 flex items-center justify-between text-xs text-steel">
               <span>
-                {l.litres.toFixed(1)} L at {l.odometer_km.toLocaleString("en-NZ")} KM
+                {l.litres != null ? `${l.litres.toFixed(1)} L` : "No litres recorded"}
+                {l.odometer_km != null ? ` at ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
               </span>
               <span className="odometer font-bold text-ink">
                 {l.cost.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}

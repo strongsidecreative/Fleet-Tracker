@@ -4,6 +4,7 @@ import Link from "next/link";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import AddFuelPanel from "./fuel/AddFuelPanel";
 
 export default async function DriverDashboard({
   searchParams,
@@ -91,6 +92,7 @@ export default async function DriverDashboard({
           >
             Scan to Finish
           </Link>
+          {features.fuel_tracking && <AddFuelPanel vehicleId={activeTrip.vehicle_id} tripId={activeTrip.id} />}
         </div>
       ) : (
         <div data-tour="driver-scan-card" className="rounded-2xl border border-steel/20 bg-white p-4 text-center">

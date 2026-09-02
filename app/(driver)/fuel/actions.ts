@@ -1,10 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
-type ActionState = { error: string | null };
+type ActionState = { error: string | null; success?: boolean };
 
+// Fuel logging is only ever done from the driver's own "Current Vehicle"
+// card, mid-trip — never against a parked vehicle, by a driver or an
+// admin. The form only ever renders that way, but this is the actual
+// enforcement: without a matching active vehicle_usage row for this
+// driver and vehicle, the insert is refused, regardless of what a
+// crafted request claims.
 export async function logFuel(prevState: ActionState, formData: FormData): Promise<ActionState> {
   const supabase = createClient();
   const {
@@ -16,18 +22,22 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
   }
 
   const vehicleId = formData.get("vehicleId") as string;
-  if (!vehicleId) return { error: "Please select a vehicle." };
-
-  const odometerRaw = formData.get("odometerKm");
-  const odometerKm = Number(odometerRaw);
-  if (!odometerRaw || Number.isNaN(odometerKm) || odometerKm < 0) {
-    return { error: "Please enter the kilometre reading shown on the vehicle." };
+  const tripId = formData.get("tripId") as string;
+  if (!vehicleId || !tripId) {
+    return { error: "You need a vehicle checked out to log fuel." };
   }
 
-  const litresRaw = formData.get("litres");
-  const litres = Number(litresRaw);
-  if (!litresRaw || Number.isNaN(litres) || litres <= 0) {
-    return { error: "Please enter how many litres you put in." };
+  const { data: activeTrip } = await supabase
+    .from("vehicle_usage")
+    .select("id")
+    .eq("id", tripId)
+    .eq("vehicle_id", vehicleId)
+    .eq("driver_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!activeTrip) {
+    return { error: "That trip isn't active any more. Fuel can only be logged while a vehicle is checked out." };
   }
 
   const costRaw = formData.get("cost");
@@ -36,13 +46,14 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
     return { error: "Please enter the total amount paid." };
   }
 
-  const notes = (formData.get("notes") as string)?.trim() || null;
-
-  // Same "read fresh, never trust the client" pattern as vehicle checks —
-  // just used here to confirm the vehicle actually exists before we
-  // bother uploading a receipt for it.
-  const { data: vehicle } = await supabase.from("vehicles").select("id").eq("id", vehicleId).single();
-  if (!vehicle) return { error: "That vehicle couldn't be found. Please try again." };
+  const litresRaw = formData.get("litres");
+  let litres: number | null = null;
+  if (litresRaw && String(litresRaw).trim() !== "") {
+    litres = Number(litresRaw);
+    if (Number.isNaN(litres) || litres <= 0) {
+      return { error: "Litres, if entered, needs to be a number greater than 0." };
+    }
+  }
 
   let receiptPhotoUrl: string | null = null;
   const receipt = formData.get("receipt") as File | null;
@@ -60,16 +71,17 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
   const { error } = await supabase.from("fuel_logs").insert({
     vehicle_id: vehicleId,
     driver_id: user.id,
-    odometer_km: odometerKm,
+    trip_id: tripId,
     litres,
     cost,
     receipt_photo_url: receiptPhotoUrl,
-    notes,
   });
 
   if (error) {
     return { error: "Something went wrong saving this fuel log. Please try again." };
   }
 
-  redirect("/fuel?success=Fuel logged");
+  revalidatePath("/");
+  revalidatePath("/fuel");
+  return { error: null, success: true };
 }

@@ -65,15 +65,19 @@ export default async function ReportViewPage({
   // — a fill-up near either edge of the date range can skew a single
   // period, but it evens out over a few weeks/months, which is the level
   // this is meant to be read at.
-  const fuelByVehicle: Record<string, { name: string; litres: number; cost: number }> = {};
+  const fuelByVehicle: Record<string, { name: string; litres: number; cost: number; hasLitres: boolean }> = {};
   (fuelLogs ?? []).forEach((f) => {
     const key = f.vehicle_id;
-    if (!fuelByVehicle[key]) fuelByVehicle[key] = { name: f.vehicle?.name ?? "Unknown", litres: 0, cost: 0 };
-    fuelByVehicle[key].litres += f.litres;
+    if (!fuelByVehicle[key]) fuelByVehicle[key] = { name: f.vehicle?.name ?? "Unknown", litres: 0, cost: 0, hasLitres: false };
+    if (f.litres != null) {
+      fuelByVehicle[key].litres += f.litres;
+      fuelByVehicle[key].hasLitres = true;
+    }
     fuelByVehicle[key].cost += f.cost;
   });
 
-  const fuelTotalLitres = (fuelLogs ?? []).reduce((s, f) => s + f.litres, 0);
+  const fuelTotalLitres = (fuelLogs ?? []).reduce((s, f) => s + (f.litres ?? 0), 0);
+  const fuelHasAnyLitres = (fuelLogs ?? []).some((f) => f.litres != null);
   const fuelTotalCost = (fuelLogs ?? []).reduce((s, f) => s + f.cost, 0);
 
   const fuelVehicleRows = Object.entries(fuelByVehicle)
@@ -82,9 +86,10 @@ export default async function ReportViewPage({
       return {
         name: f.name,
         litres: f.litres,
+        hasLitres: f.hasLitres,
         cost: f.cost,
         km,
-        litresPer100km: km > 0 ? (f.litres / km) * 100 : null,
+        litresPer100km: km > 0 && f.hasLitres ? (f.litres / km) * 100 : null,
         costPerKm: km > 0 ? f.cost / km : null,
       };
     })
@@ -160,7 +165,10 @@ export default async function ReportViewPage({
           <div className="mb-3 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-steel/20 bg-white p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-steel">Litres Purchased</p>
-              <p className="odometer mt-1 text-2xl font-bold text-ink">{fuelTotalLitres.toFixed(1)} L</p>
+              <p className="odometer mt-1 text-2xl font-bold text-ink">
+                {fuelHasAnyLitres ? `${fuelTotalLitres.toFixed(1)} L` : "—"}
+              </p>
+              {!fuelHasAnyLitres && <p className="mt-0.5 text-[10px] text-steel">Not entered this period</p>}
             </div>
             <div className="rounded-xl border border-steel/20 bg-white p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-steel">Fuel Spend</p>
@@ -182,12 +190,15 @@ export default async function ReportViewPage({
                 </div>
                 <div className="mt-0.5 flex items-center justify-between text-xs text-steel">
                   <span>
-                    {f.litres.toFixed(1)} L{f.km > 0 ? ` · ${f.km.toLocaleString("en-NZ")} KM driven` : ""}
+                    {f.hasLitres ? `${f.litres.toFixed(1)} L` : "No litres recorded"}
+                    {f.km > 0 ? ` · ${f.km.toLocaleString("en-NZ")} KM driven` : ""}
                   </span>
                   <span>
                     {f.litresPer100km !== null
                       ? `${f.litresPer100km.toFixed(1)} L/100km · ${(f.costPerKm ?? 0).toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}/KM`
-                      : "No completed trips this period"}
+                      : f.km > 0
+                        ? `${(f.costPerKm ?? 0).toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}/KM`
+                        : "No completed trips this period"}
                   </span>
                 </div>
               </div>
