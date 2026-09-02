@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import TouchFeedback from "@/components/TouchFeedback";
 import { TourProvider } from "@/components/tour/TourContext";
 
 // Self-hosts these two families at build time instead of loading them from
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable}`}>
       <body>
         <ServiceWorkerRegister />
+        <TouchFeedback />
         <TourProvider>{children}</TourProvider>
       </body>
     </html>

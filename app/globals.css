@@ -41,3 +41,24 @@ textarea:focus-visible {
 ::selection {
   @apply bg-brandLight/40;
 }
+
+/* Tap feedback, everywhere — buttons, links, and anything wrapped in a
+   Link (vehicle cards, nav tabs, form buttons) visibly press down and dim
+   for the moment they're held, instead of giving no sign a tap registered
+   until whatever it triggers finishes (navigation, a state change, a
+   server action). TouchFeedback.tsx (mounted once in the root layout)
+   is what makes :active fire reliably on iOS Safari in the first place. */
+a,
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms ease-out, opacity 100ms ease-out;
+}
+
+a:active,
+button:not(:disabled):active,
+[role="button"]:active {
+  transform: scale(0.97);
+  opacity: 0.75;
+}
+
