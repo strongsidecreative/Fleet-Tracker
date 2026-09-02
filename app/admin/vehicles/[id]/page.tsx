@@ -61,6 +61,14 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
             Vehicle Check History
           </a>
         )}
+        {features.fuel_tracking && (
+          <a
+            href={`/admin/fuel?vehicleId=${vehicle.id}`}
+            className="inline-block rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink"
+          >
+            Fuel History
+          </a>
+        )}
       </div>
 
       <div className="mb-4">

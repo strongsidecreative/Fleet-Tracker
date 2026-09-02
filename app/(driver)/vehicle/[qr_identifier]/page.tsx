@@ -209,14 +209,22 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
         )}
       </div>
 
-      {(features.vehicle_checks || features.incident_reports) && (
-        <div className="mt-3 flex gap-2">
+      {(features.vehicle_checks || features.incident_reports || features.fuel_tracking) && (
+        <div className="mt-3 flex flex-wrap gap-2">
           {features.vehicle_checks && (
             <Link
               href={`/vehicle-check?vehicleId=${vehicle.id}`}
               className="flex-1 rounded-xl border border-brand/40 bg-brand/10 py-2.5 text-center text-sm font-semibold text-brand"
             >
               Vehicle Check
+            </Link>
+          )}
+          {features.fuel_tracking && (
+            <Link
+              href={`/fuel/new?vehicleId=${vehicle.id}`}
+              className="flex-1 rounded-xl border border-steel/30 bg-white py-2.5 text-center text-sm font-semibold text-ink"
+            >
+              Log Fuel
             </Link>
           )}
           {features.incident_reports && (

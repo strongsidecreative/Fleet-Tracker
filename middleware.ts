@@ -52,7 +52,8 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/account") ||
     path.startsWith("/scan") ||
     path.startsWith("/bookings") ||
-    path.startsWith("/report-incident");
+    path.startsWith("/report-incident") ||
+    path.startsWith("/fuel");
 
   // Not logged in and trying to reach a protected page: save where they
   // were headed, then send them to login. This is what lets a driver who
@@ -131,6 +132,7 @@ export const config = {
     "/scan/:path*",
     "/bookings/:path*",
     "/report-incident/:path*",
+    "/fuel/:path*",
     "/admin/:path*",
     "/api/admin/:path*",
   ],

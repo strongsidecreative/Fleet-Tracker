@@ -7,6 +7,8 @@ import { driverTourSteps } from "@/components/tour/tourSteps";
 import { deactivateOwnDriverAccount } from "@/app/admin/users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import ErrorBanner from "@/components/ErrorBanner";
+import Link from "next/link";
+import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
 export default async function AccountPage() {
   const supabase = createClient();
@@ -14,9 +16,10 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: profile }, { data: licence }] = await Promise.all([
+  const [{ data: profile }, { data: licence }, features] = await Promise.all([
     supabase.from("profiles").select("name, email, role").eq("id", user!.id).single(),
     supabase.from("driver_licences").select("*").eq("driver_id", user!.id).maybeSingle(),
+    getViewerFeatures(supabase, user!.id),
   ]);
 
   return (
@@ -44,6 +47,16 @@ export default async function AccountPage() {
       </div>
 
       <PushSubscribeButton />
+
+      {features.fuel_tracking && (
+        <Link
+          href="/fuel"
+          className="flex items-center justify-between rounded-xl border border-steel/20 bg-white p-4"
+        >
+          <span className="text-sm font-bold text-ink">My Fuel Log</span>
+          <span className="text-xs font-medium text-brand underline">View →</span>
+        </Link>
+      )}
 
       <div>
         <p className="mb-2 text-sm font-bold text-ink">Driver Licence</p>

@@ -5,13 +5,14 @@
 // by ordinary server components. Anything that needs a Supabase client
 // lives in orgFeatures.server.ts instead.
 
-export type FeatureKey = "incident_reports" | "vehicle_checks" | "reports" | "audit_log";
+export type FeatureKey = "incident_reports" | "vehicle_checks" | "reports" | "audit_log" | "fuel_tracking";
 
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   incident_reports: "Incident Reports",
   vehicle_checks: "Vehicle Checks",
   reports: "Reports",
   audit_log: "Audit Log",
+  fuel_tracking: "Fuel Tracking",
 };
 
 export const FEATURE_DESCRIPTIONS: Record<FeatureKey, string> = {
@@ -19,6 +20,7 @@ export const FEATURE_DESCRIPTIONS: Record<FeatureKey, string> = {
   vehicle_checks: "Drivers complete pre/post-operation vehicle checks.",
   reports: "The admin Reports page, date-range views, and CSV exports.",
   audit_log: "The admin Audit Log of overrides and approval decisions.",
+  fuel_tracking: "Drivers log fuel fill-ups with a receipt photo; admins see fuel cost and fuel-to-KM usage in Reports.",
 };
 
 // Every organisation gets every feature unless it's been explicitly
@@ -29,6 +31,7 @@ export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
   vehicle_checks: true,
   reports: true,
   audit_log: true,
+  fuel_tracking: true,
 };
 
 const FEATURE_KEYS = Object.keys(DEFAULT_FEATURES) as FeatureKey[];
@@ -61,6 +64,8 @@ export const FEATURE_PATH_RULES: { prefix: string; feature: FeatureKey }[] = [
   { prefix: "/vehicle-check", feature: "vehicle_checks" },
   { prefix: "/admin/reports", feature: "reports" },
   { prefix: "/admin/audit", feature: "audit_log" },
+  { prefix: "/admin/fuel", feature: "fuel_tracking" },
+  { prefix: "/fuel", feature: "fuel_tracking" },
 ];
 
 export function featureForPath(path: string): FeatureKey | null {

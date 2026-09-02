@@ -33,6 +33,7 @@ const groups: { label: string; items: NavItem[] }[] = [
         match: (p) => p.startsWith("/admin/people") || p.startsWith("/admin/drivers") || p.startsWith("/admin/admins"),
       },
       { href: "/admin/bookings", label: "Bookings", tourId: "nav-admin-bookings" },
+      { href: "/admin/fuel", label: "Fuel", tourId: "nav-admin-fuel", feature: "fuel_tracking" },
     ],
   },
   {
