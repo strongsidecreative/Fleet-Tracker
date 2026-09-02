@@ -93,6 +93,7 @@ export default function AddFuelPanel({ vehicleId, tripId }: { vehicleId: string;
           name="receipt"
           accept="image/*"
           capture="environment"
+          required
           onChange={(e) => setReceiptName(e.target.files?.[0]?.name ?? null)}
           className="w-full text-xs text-steel"
         />

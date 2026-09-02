@@ -55,18 +55,21 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
     }
   }
 
-  let receiptPhotoUrl: string | null = null;
   const receipt = formData.get("receipt") as File | null;
-  if (receipt && receipt.size > 0) {
-    const ext = receipt.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const path = `fuel/${user.id}-${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabase.storage
-      .from("vehicle-photos")
-      .upload(path, receipt, { contentType: receipt.type });
-    if (!uploadError) {
-      receiptPhotoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
-    }
+  if (!receipt || receipt.size === 0) {
+    return { error: "Please attach a photo of the receipt." };
   }
+
+  let receiptPhotoUrl: string | null = null;
+  const ext = receipt.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+  const path = `fuel/${user.id}-${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("vehicle-photos")
+    .upload(path, receipt, { contentType: receipt.type });
+  if (uploadError) {
+    return { error: "Couldn't upload the receipt photo. Please try again." };
+  }
+  receiptPhotoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
 
   const { error } = await supabase.from("fuel_logs").insert({
     vehicle_id: vehicleId,
