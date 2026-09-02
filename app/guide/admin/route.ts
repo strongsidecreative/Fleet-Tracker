@@ -125,6 +125,7 @@ section.block:first-of-type{border-top:none;}
 .benefit-card p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.55;}
 
 .icon-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;}
+.icon-grid.cols-3{grid-template-columns:repeat(3,1fr);}
 @media (max-width:640px){.icon-grid{grid-template-columns:repeat(2,1fr);}}
 .icon-tile{background:var(--surface);padding:20px 16px;}
 .icon-tile .badge{margin-bottom:12px;}
@@ -172,6 +173,7 @@ section.block:first-of-type{border-top:none;}
 footer{border-top:1px solid var(--line-soft);padding:36px 0 64px;text-align:center;color:var(--muted-2);font-size:12.5px;}
 footer a{color:var(--brand-light);text-decoration:none;}
 
+.role-toggle button:focus-visible,
 .device-tab:focus-visible,
 .faq summary:focus-visible,
 .nav-toggle:focus-visible,
@@ -312,13 +314,14 @@ nav.links a:focus-visible{
         <p class="section-sub">A quick reference. The in-app tour covers the rest, hands-on, the first time you sign in.</p>
       </div>
     </div>
-    <div class="icon-grid">
+    <div class="icon-grid cols-3">
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.3"/><rect x="14" y="3" width="7" height="5" rx="1.3"/><rect x="14" y="12" width="7" height="9" rx="1.3"/><rect x="3" y="16" width="7" height="5" rx="1.3"/></svg></div><h4>Dashboard</h4><p>Vehicles out vs. free, alerts by severity</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="7" rx="2"/><path d="M5 10l2-4h10l2 4"/><circle cx="7.5" cy="17.5" r="1.3"/><circle cx="16.5" cy="17.5" r="1.3"/></svg></div><h4>Vehicles</h4><p>Add, set compliance, print QR</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 20v-1a6 6 0 0 1 6-6"/><circle cx="17" cy="8" r="2.4"/><path d="M14.5 20v-1a5 5 0 0 1 5.7-4.9"/></svg></div><h4>People</h4><p>Invite, deactivate, no hard deletes</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M4 9h16M8 2v4M16 2v4"/><circle cx="9" cy="14" r="1.3"/></svg></div><h4>Bookings</h4><p>Approve, decline, no double-booking</p></div>
+      <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M6 21V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v15"/><path d="M4.5 21h9"/><path d="M8 9h3"/><path d="M13 10h2.5l2.3 2.3v6a1.4 1.4 0 0 1-2.8 0v-3.8l-1.5-1.5"/></svg></div><h4>Fuel</h4><p>Fleet-wide log, receipts, CSV export</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 3V2h6v1"/><path d="M8.5 12l2.3 2.3L16 9.5"/></svg></div><h4>Checks &amp; incidents</h4><p>Review, escalate with one click</p></div>
-      <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg></div><h4>Reports &amp; records</h4><p>Live view plus CSV export</p></div>
+      <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg></div><h4>Reports &amp; records</h4><p>Live view, CSV export, fuel vs. KM</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1.3"/><rect x="15" y="3" width="6" height="6" rx="1.3"/><rect x="3" y="15" width="6" height="6" rx="1.3"/><rect x="15" y="15" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="18.8" y="15" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="15" y="18.8" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="18.8" y="18.8" width="2.2" height="2.2" fill="currentColor" stroke="none"/></svg></div><h4>Your trips</h4><p>Admins are drivers too</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-5 5v3.3c0 1-.4 2-1.1 2.7L5 15h14l-.9-1c-.7-.7-1.1-1.7-1.1-2.7V8a5 5 0 0 0-5-5z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0"/></svg></div><h4>Audit &amp; alerts</h4><p>Action log, notifications in one place</p></div>
     </div>
@@ -412,6 +415,7 @@ nav.links a:focus-visible{
     <details><summary>A driver forgot to scan out, vehicle's stuck "in use." Fix it?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Records &rarr; Open Sessions at the top &rarr; force-close it.</p></details>
     <details><summary>How do I reprint a vehicle's QR code?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Vehicles &rarr; that vehicle &rarr; QR code page &rarr; Print or Download.</p></details>
     <details><summary>Can I remove someone without losing their history?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Yes, deactivate rather than delete. Their trips and records stay intact.</p></details>
+    <details><summary>We don't need Fuel Tracking or another module, can we turn it off?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Yes. Account &rarr; Features lets you switch any module on or off fleet-wide.</p></details>
     <details><summary>Is our data visible to other organisations?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>No, every organisation is fully separate, always.</p></details>
   </div>
 </section>

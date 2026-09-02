@@ -125,6 +125,7 @@ section.block:first-of-type{border-top:none;}
 .benefit-card p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.55;}
 
 .icon-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;}
+.icon-grid.cols-3{grid-template-columns:repeat(3,1fr);}
 @media (max-width:640px){.icon-grid{grid-template-columns:repeat(2,1fr);}}
 .icon-tile{background:var(--surface);padding:20px 16px;}
 .icon-tile .badge{margin-bottom:12px;}
@@ -172,6 +173,7 @@ section.block:first-of-type{border-top:none;}
 footer{border-top:1px solid var(--line-soft);padding:36px 0 64px;text-align:center;color:var(--muted-2);font-size:12.5px;}
 footer a{color:var(--brand-light);text-decoration:none;}
 
+.role-toggle button:focus-visible,
 .device-tab:focus-visible,
 .faq summary:focus-visible,
 .nav-toggle:focus-visible,
@@ -214,11 +216,12 @@ nav.links a:focus-visible{
 
 <section class="block">
   <div class="wrap">
-    <div class="section-head"><div><div class="eyebrow">The basics</div><h2>Four things you'll actually do</h2></div></div>
-    <div class="icon-grid">
+    <div class="section-head"><div><div class="eyebrow">The basics</div><h2>Five things you'll actually do</h2></div></div>
+    <div class="icon-grid cols-3">
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1.3"/><rect x="15" y="3" width="6" height="6" rx="1.3"/><rect x="3" y="15" width="6" height="6" rx="1.3"/><rect x="15" y="15" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="18.8" y="15" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="15" y="18.8" width="2.2" height="2.2" fill="currentColor" stroke="none"/><rect x="18.8" y="18.8" width="2.2" height="2.2" fill="currentColor" stroke="none"/></svg></div><h4>Scan to start &amp; end a trip</h4><p>One QR scan, no app needed</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M4 9h16M8 2v4M16 2v4"/><circle cx="9" cy="14" r="1.3"/></svg></div><h4>Book a vehicle ahead</h4><p>Reserve a time slot in advance</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.2l2.4 2.4L16 9"/></svg></div><h4>Run a vehicle check</h4><p>A quick 9-point inspection</p></div>
+      <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M6 21V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v15"/><path d="M4.5 21h9"/><path d="M8 9h3"/><path d="M13 10h2.5l2.3 2.3v6a1.4 1.4 0 0 1-2.8 0v-3.8l-1.5-1.5"/></svg></div><h4>Log a fill-up</h4><p>Odometer, litres, cost, receipt photo</p></div>
       <div class="icon-tile"><div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M12 9v4m0 3.5h.01"/><path d="M10.3 3.9L2.6 17.8a1.8 1.8 0 0 0 1.6 2.7h15.6a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/></svg></div><h4>Report an incident</h4><p>Flag anything straight to an admin</p></div>
     </div>
   </div>
@@ -283,6 +286,7 @@ nav.links a:focus-visible{
     <details><summary>How do I get push notifications on iPhone?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Add to Home Screen first, then turn them on in Account.</p></details>
     <details><summary>Can I edit a booking after it's approved?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Yes, changing it sends it back for re-approval automatically.</p></details>
     <details><summary>Vehicle Check vs. Report an Incident, what's the difference?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>Check is a routine inspection. Incident is for anything that happened during a trip.</p></details>
+    <details><summary>Do I have to log fuel every time I fill up?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>It's optional but helps your admin track cost. Log it from the vehicle page or /fuel any time, not just mid-trip.</p></details>
     <details><summary>Can I update my own licence details?<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9"><path d="M6 9l6 6 6-6"/></svg></summary><p>No, that's admin-only. You can view yours under Account.</p></details>
   </div>
 </section>
