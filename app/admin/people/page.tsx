@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverEmailFromAdmin } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import SwipeableRow from "@/components/SwipeableRow";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -155,82 +156,94 @@ export default async function AdminPeoplePage({
           // never-real placeholder domain auth email already uses.
           const emailRemoved = d.email.endsWith("@fleet-tracker.invalid");
 
+          // Driver deactivation is one-way (see deactivateDriverFromAdmin) —
+          // it already frees up their real email at the auth level for a
+          // fresh invite. Remove is a separate, explicit next step for a
+          // deactivated driver: it scrubs the real address out of
+          // `profiles.email` too, so nothing of it is left in the database.
+          // Once removed there's nothing left to reactivate into — inviting
+          // that person (or anyone else) back happens through the normal
+          // Add Driver flow, since the address is fully free.
+          //
+          // These live in the swipe-reveal actions strip rather than as
+          // inline buttons — swipe the row left to see them.
+          const rowActions = (
+            <>
+              {d.active && pendingIds.has(d.id) && (
+                <form action={resendInvite.bind(null, d.email, "driver")} className="flex">
+                  <button
+                    type="submit"
+                    className="flex h-full min-w-[104px] items-center justify-center bg-brand px-4 text-xs font-semibold text-paper"
+                  >
+                    Resend invite
+                  </button>
+                </form>
+              )}
+              {d.active && (
+                <form action={deactivateDriverFromAdmin.bind(null, d.id)} className="flex">
+                  <ConfirmSubmitButton
+                    confirmMessage={`Deactivate ${d.name}? Can't be undone.`}
+                    className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+                  >
+                    Deactivate
+                  </ConfirmSubmitButton>
+                </form>
+              )}
+              {!d.active && !emailRemoved && (
+                <form action={removeDriverEmailFromAdmin.bind(null, d.id)} className="flex">
+                  <ConfirmSubmitButton
+                    confirmMessage={`Remove ${d.name}'s email? Can't be undone. You can invite this address again afterwards.`}
+                    className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+                  >
+                    Remove
+                  </ConfirmSubmitButton>
+                </form>
+              )}
+            </>
+          );
+
           return (
-            <div className="rounded-xl border border-steel/20 bg-white p-3">
-              <div className="flex items-center justify-between">
-                <Link href={`/admin/drivers/${d.id}`} className="flex-1">
-                  <p className="font-medium text-ink">
-                    {d.name}{" "}
-                    {!d.active && (
-                      <span className="text-xs text-steel">
-                        (deactivated{emailRemoved ? ", email removed" : ""})
+            <SwipeableRow actions={rowActions}>
+              <div className="rounded-xl border border-steel/20 bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <Link href={`/admin/drivers/${d.id}`} className="flex-1">
+                    <p className="font-medium text-ink">
+                      {d.name}{" "}
+                      {!d.active && (
+                        <span className="text-xs text-steel">
+                          (deactivated{emailRemoved ? ", email removed" : ""})
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-steel">
+                      {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
+                    </p>
+                    {d.active && pendingIds.has(d.id) && (
+                      <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
+                        Invite pending
                       </span>
                     )}
-                  </p>
-                  <p className="mt-0.5 text-xs text-steel">
-                    {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
-                  </p>
-                  {d.active && pendingIds.has(d.id) && (
-                    <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
-                      Invite pending
-                    </span>
-                  )}
-                </Link>
-                <div className="flex items-center gap-2">
-                  {severity && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${LICENCE_BADGE_CLASS[severity]}`}>
-                      {LICENCE_LABEL[severity]}
-                    </span>
-                  )}
-                  {active && (
-                    <span className="rounded-full bg-amber/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber">
-                      In {active.vehicle?.name}
-                    </span>
-                  )}
-                  {d.active && pendingIds.has(d.id) && (
-                    <form action={resendInvite.bind(null, d.email, "driver")}>
-                      <button type="submit" className="text-xs font-medium text-brand underline">
-                        Resend invite
-                      </button>
-                    </form>
-                  )}
-                  {/* Driver deactivation is one-way (see deactivateDriverFromAdmin)
-                      — it already frees up their real email at the auth level
-                      for a fresh invite. Remove is a separate, explicit next
-                      step for a deactivated driver: it scrubs the real
-                      address out of `profiles.email` too, so nothing of it
-                      is left in the database. Once removed there's nothing
-                      left to reactivate into — inviting that person (or
-                      anyone else) back happens through the normal Add
-                      Driver flow, since the address is fully free. */}
-                  {d.active && (
-                    <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
-                      <ConfirmSubmitButton
-                        confirmMessage={`Deactivate ${d.name}? Can't be undone.`}
-                        className="text-xs font-medium text-rust underline"
-                      >
-                        Deactivate
-                      </ConfirmSubmitButton>
-                    </form>
-                  )}
-                  {!d.active && !emailRemoved && (
-                    <form action={removeDriverEmailFromAdmin.bind(null, d.id)}>
-                      <ConfirmSubmitButton
-                        confirmMessage={`Remove ${d.name}'s email? Can't be undone. You can invite this address again afterwards.`}
-                        className="text-xs font-medium text-rust underline"
-                      >
-                        Remove
-                      </ConfirmSubmitButton>
-                    </form>
-                  )}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    {severity && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${LICENCE_BADGE_CLASS[severity]}`}>
+                        {LICENCE_LABEL[severity]}
+                      </span>
+                    )}
+                    {active && (
+                      <span className="rounded-full bg-amber/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber">
+                        In {active.vehicle?.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-between text-xs text-steel">
+                  <span>Week: {weekKm.toLocaleString("en-NZ")} KM</span>
+                  <span>Month: {monthKm.toLocaleString("en-NZ")} KM</span>
+                  <span>Total: {totalKm.toLocaleString("en-NZ")} KM</span>
                 </div>
               </div>
-              <div className="mt-2 flex justify-between text-xs text-steel">
-                <span>Week: {weekKm.toLocaleString("en-NZ")} KM</span>
-                <span>Month: {monthKm.toLocaleString("en-NZ")} KM</span>
-                <span>Total: {totalKm.toLocaleString("en-NZ")} KM</span>
-              </div>
-            </div>
+            </SwipeableRow>
           );
         };
 
