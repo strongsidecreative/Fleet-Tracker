@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAnonClient } from "@/lib/supabase/anon";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
@@ -21,6 +22,17 @@ export async function toggleUserActive(userId: string, newActive: boolean) {
  * user that already exists, so this reuses the password-recovery flow
  * instead; ResetPasswordForm.tsx already handles both invite and recovery
  * links the same way, so no new page is needed.
+ *
+ * The reset email itself is sent through createAnonClient(), not the
+ * cookie-bound `supabase` client used for the caller check above. That
+ * client is built with @supabase/ssr, which forces PKCE — fine for a
+ * self-service "forgot password" request made and redeemed in the same
+ * browser, but this call is an admin triggering a reset link that a
+ * DIFFERENT person will open on a DIFFERENT device. PKCE's verifier would
+ * only ever exist in the admin's own cookies, so that link could never be
+ * redeemed — see anon.ts for the full explanation. This was breaking
+ * every admin-resent invite and every driver reactivation link 100% of
+ * the time, regardless of email provider or spam placement.
  */
 export async function resendInvite(email: string, role: "driver" | "admin") {
   const supabase = createClient();
@@ -34,7 +46,7 @@ export async function resendInvite(email: string, role: "driver" | "admin") {
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl}/reset-password` });
+  await createAnonClient().auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl}/reset-password` });
 
   revalidatePath("/admin/people");
   redirect(`/admin/people?role=${role}&success=Invite resent`);
