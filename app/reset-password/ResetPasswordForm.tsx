@@ -8,6 +8,7 @@ export default function ResetPasswordForm() {
   const supabase = createClient();
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [linkDead, setLinkDead] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -15,17 +16,44 @@ export default function ResetPasswordForm() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Supabase fires this once it's parsed the recovery token from the
-    // email link's URL fragment. Until then, the form stays hidden so
-    // people don't submit before a valid recovery session exists.
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setReady(true);
+    // Supabase appends error=...&error_description=... instead of a session
+    // when the link is invalid, expired, or already used (e.g. consumed by
+    // an email client's link-scanner before the real click). Check both the
+    // query string and the hash fragment, since Supabase uses different
+    // formats depending on flow type.
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const errorDescription =
+      searchParams.get("error_description") || hashParams.get("error_description");
+    if (errorDescription) {
+      setLinkDead(decodeURIComponent(errorDescription.replace(/\+/g, " ")));
+      return;
+    }
+
+    // Recovery links (resetPasswordForEmail) fire PASSWORD_RECOVERY.
+    // Invite links (inviteUserByEmail) fire SIGNED_IN instead — both mean
+    // a valid session now exists and the form should show.
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
+        setReady(true);
+      }
     });
+
     // In case the event already fired before this component mounted.
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) setReady(true);
     });
-    return () => listener.subscription.unsubscribe();
+
+    // Safety net: if nothing has resolved a session after a few seconds,
+    // stop showing "checking..." forever and tell the person plainly.
+    const timeout = setTimeout(() => {
+      setLinkDead((current) => current ?? "This link has expired or has already been used.");
+    }, 6000);
+
+    return () => {
+      listener.subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [supabase]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -76,13 +104,23 @@ export default function ResetPasswordForm() {
     );
   }
 
+  if (linkDead) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+        <div className="max-w-sm text-center">
+          <p className="text-sm text-steel">{linkDead}</p>
+          <a href="/login" className="mt-4 inline-block text-sm font-semibold text-brand underline">
+            Go to login to request a new one
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-paper px-4">
-        <p className="text-center text-sm text-steel">
-          Checking your reset link… If nothing happens, the link may have expired — request a new one from the
-          login page.
-        </p>
+        <p className="text-center text-sm text-steel">Checking your reset link…</p>
       </div>
     );
   }
