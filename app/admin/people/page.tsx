@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, reactivateDriverAndResendInvite } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverEmailFromAdmin } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
-import ReactivateConfirm from "@/components/ReactivateConfirm";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -150,13 +149,23 @@ export default async function AdminPeoplePage({
           const active = activeTrips?.find((t) => t.driver_id === d.id);
           const licence = licences?.find((l) => l.driver_id === d.id);
           const severity = licence ? licenceSeverity(licence.expiry_date) : null;
+          // Deactivating already frees a driver's real email at the auth
+          // level — removeDriverEmail just scrubs the last visible copy of
+          // it out of `profiles.email` too, mirroring in the same
+          // never-real placeholder domain auth email already uses.
+          const emailRemoved = d.email.endsWith("@fleet-tracker.invalid");
 
           return (
             <div className="rounded-xl border border-steel/20 bg-white p-3">
               <div className="flex items-center justify-between">
                 <Link href={`/admin/drivers/${d.id}`} className="flex-1">
                   <p className="font-medium text-ink">
-                    {d.name} {!d.active && <span className="text-xs text-steel">(deactivated)</span>}
+                    {d.name}{" "}
+                    {!d.active && (
+                      <span className="text-xs text-steel">
+                        (deactivated{emailRemoved ? ", email removed" : ""})
+                      </span>
+                    )}
                   </p>
                   <p className="mt-0.5 text-xs text-steel">
                     {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
@@ -185,35 +194,34 @@ export default async function AdminPeoplePage({
                       </button>
                     </form>
                   )}
-                  {/* Driver deactivation is one-way going forward (see
-                      deactivateDriverFromAdmin) — it frees up their real email
-                      for a fresh invite as part of the same click, so there's
-                      normally no need to reactivate a driver afterwards.
-                      Reactivate is kept here as a fallback for drivers who
-                      were deactivated the old way, before that email-freeing
-                      step existed — their email was never changed, so flipping
-                      them back to active restores their exact previous login.
-                      For a driver deactivated the new way, flipping `active`
-                      alone won't restore login (their email/password were
-                      already replaced), so ReactivateConfirm asks whether to
-                      also resend an invite via the existing resendInvite path. */}
+                  {/* Driver deactivation is one-way (see deactivateDriverFromAdmin)
+                      — it already frees up their real email at the auth level
+                      for a fresh invite. Remove is a separate, explicit next
+                      step for a deactivated driver: it scrubs the real
+                      address out of `profiles.email` too, so nothing of it
+                      is left in the database. Once removed there's nothing
+                      left to reactivate into — inviting that person (or
+                      anyone else) back happens through the normal Add
+                      Driver flow, since the address is fully free. */}
                   {d.active && (
                     <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
                       <ConfirmSubmitButton
-                        confirmMessage={`Deactivate ${d.name}? Can't be undone. Frees up their email to invite again. Their trip, booking, incident and check history stays.`}
+                        confirmMessage={`Deactivate ${d.name}? Can't be undone.`}
                         className="text-xs font-medium text-rust underline"
                       >
                         Deactivate
                       </ConfirmSubmitButton>
                     </form>
                   )}
-                  {!d.active && (
-                    <ReactivateConfirm
-                      name={d.name}
-                      reactivateOnlyAction={toggleUserActive.bind(null, d.id, true)}
-                      reactivateAndInviteAction={reactivateDriverAndResendInvite.bind(null, d.id, d.email)}
-                      className="text-xs font-medium text-brand underline"
-                    />
+                  {!d.active && !emailRemoved && (
+                    <form action={removeDriverEmailFromAdmin.bind(null, d.id)}>
+                      <ConfirmSubmitButton
+                        confirmMessage={`Remove ${d.name}'s email? Can't be undone. You can invite this address again afterwards.`}
+                        className="text-xs font-medium text-rust underline"
+                      >
+                        Remove
+                      </ConfirmSubmitButton>
+                    </form>
                   )}
                 </div>
               </div>

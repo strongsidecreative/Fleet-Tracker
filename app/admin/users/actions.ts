@@ -161,18 +161,55 @@ export async function deactivateDriverFromAdmin(userId: string) {
 }
 
 /**
- * Reactivating a driver only flips `profiles.active` back on (see
- * toggleUserActive) — it never restores their login on its own, since a
- * driver deactivated the new way (deactivateDriverAndFreeEmail) already had
- * their email/password replaced. This pairs that flip with the existing
- * resendInvite/resetPasswordForEmail path so an admin can offer a fresh
- * invite in the same click, instead of reactivating into a dead end.
+ * Deactivating a driver already frees their real email at the auth level
+ * (see deactivateDriverAndFreeEmail) — an admin could invite that address
+ * again right away. What's left behind is the real address still sitting
+ * in `profiles.email`, used for display and exports. This scrubs that last
+ * copy by mirroring the (already-placeholder) auth email onto the profile
+ * row, so the real address isn't stored anywhere once an admin chooses to
+ * remove it. Deliberately a separate, explicit step from Deactivate —
+ * driver-only, and only meaningful once a driver is already deactivated.
  */
-export async function reactivateDriverAndResendInvite(userId: string, email: string) {
-  await toggleUserActive(userId, true);
-  // resendInvite redirects on completion (success or auth failure), so it
-  // always has the last word here — nothing after this call will run.
-  await resendInvite(email, "driver");
+export async function removeDriverEmail(userId: string): Promise<{ error: string | null }> {
+  const authCheck = await requireSelfOrOwnOrgDriver(userId);
+  if (authCheck.error) {
+    return authCheck;
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      error:
+        "The service role key isn't set up yet, so this driver's email can't be removed. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again.",
+    };
+  }
+
+  const adminClient = createAdminClient();
+
+  const { data: authUser, error: getError } = await adminClient.auth.admin.getUserById(userId);
+  if (getError || !authUser?.user?.email) {
+    return { error: "Something went wrong removing this driver's email. Please try again." };
+  }
+
+  await adminClient.from("profiles").update({ email: authUser.user.email }).eq("id", userId);
+
+  revalidatePath("/admin/people");
+
+  return { error: null };
+}
+
+/**
+ * Wraps removeDriverEmail for the admin People list — a plain form action
+ * (bound to a specific driver id), matching the deactivateDriverFromAdmin
+ * pattern above.
+ */
+export async function removeDriverEmailFromAdmin(userId: string) {
+  const result = await removeDriverEmail(userId);
+  if (result.error) {
+    redirect(`/admin/people?role=driver&error=${encodeURIComponent(result.error)}`);
+  }
+  redirect(
+    `/admin/people?role=driver&success=${encodeURIComponent("Email removed. Invite this address again any time from Add Driver.")}`
+  );
 }
 
 /**
