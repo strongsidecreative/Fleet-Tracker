@@ -36,7 +36,7 @@ export default async function AdminAccountPage() {
       <h1 className="mb-4 font-display text-xl font-bold text-ink">Account</h1>
 
       <div className="mb-4 max-w-sm">
-        <RestartTourButton steps={adminTourSteps} storageKeyPrefix="ft_tour_admin" />
+        <RestartTourButton steps={adminTourSteps} storageKeyPrefix="ft_tour_admin" userId={user!.id} />
       </div>
 
       <div className="mb-4 max-w-sm">

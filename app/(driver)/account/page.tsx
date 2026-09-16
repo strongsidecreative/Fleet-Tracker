@@ -28,7 +28,7 @@ export default async function AccountPage() {
 
       <ErrorBanner />
 
-      <RestartTourButton steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />
+      <RestartTourButton steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" userId={user!.id} />
 
       <div className="space-y-3 rounded-xl border border-steel/20 bg-white p-4">
         <div>

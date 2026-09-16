@@ -29,7 +29,9 @@ export default async function DriverLayout({ children }: { children: React.React
           dashboard. Auto-starting this one for an admin's first visit to
           /scan or /trips used to leave the tooltip stuck on-screen with
           nothing to highlight and bounce back to /admin on every "Next". */}
-      {!isAdmin && <TourLauncher steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" />}
+      {!isAdmin && user && (
+        <TourLauncher steps={driverTourSteps} storageKeyPrefix="ft_tour_driver" userId={user.id} />
+      )}
       {/* Header + tabs both sit up top in normal document flow now,
           instead of a fixed bottom tab bar — consistent with the admin
           nav layout. */}
