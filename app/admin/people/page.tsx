@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, reactivateDriverAndResendInvite } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import ReactivateConfirm from "@/components/ReactivateConfirm";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -188,13 +189,14 @@ export default async function AdminPeoplePage({
                       deactivateDriverFromAdmin) — it frees up their real email
                       for a fresh invite as part of the same click, so there's
                       normally no need to reactivate a driver afterwards.
-                      Reactivate is kept here only as a fallback for drivers
-                      who were deactivated the old way, before that email-freeing
+                      Reactivate is kept here as a fallback for drivers who
+                      were deactivated the old way, before that email-freeing
                       step existed — their email was never changed, so flipping
                       them back to active restores their exact previous login.
-                      Reactivating a driver deactivated the new way is harmless
-                      but won't restore login, since their email/password were
-                      already replaced. */}
+                      For a driver deactivated the new way, flipping `active`
+                      alone won't restore login (their email/password were
+                      already replaced), so ReactivateConfirm asks whether to
+                      also resend an invite via the existing resendInvite path. */}
                   {d.active && (
                     <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
                       <ConfirmSubmitButton
@@ -206,14 +208,12 @@ export default async function AdminPeoplePage({
                     </form>
                   )}
                   {!d.active && (
-                    <form action={toggleUserActive.bind(null, d.id, true)}>
-                      <ConfirmSubmitButton
-                        confirmMessage={`Reactivate ${d.name}? Only do this if they were deactivated before the newer "free up their email" behaviour existed — otherwise their email has already been replaced and they still won't be able to log back in with it.`}
-                        className="text-xs font-medium text-brand underline"
-                      >
-                        Reactivate
-                      </ConfirmSubmitButton>
-                    </form>
+                    <ReactivateConfirm
+                      name={d.name}
+                      reactivateOnlyAction={toggleUserActive.bind(null, d.id, true)}
+                      reactivateAndInviteAction={reactivateDriverAndResendInvite.bind(null, d.id, d.email)}
+                      className="text-xs font-medium text-brand underline"
+                    />
                   )}
                 </div>
               </div>

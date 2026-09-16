@@ -161,6 +161,21 @@ export async function deactivateDriverFromAdmin(userId: string) {
 }
 
 /**
+ * Reactivating a driver only flips `profiles.active` back on (see
+ * toggleUserActive) — it never restores their login on its own, since a
+ * driver deactivated the new way (deactivateDriverAndFreeEmail) already had
+ * their email/password replaced. This pairs that flip with the existing
+ * resendInvite/resetPasswordForEmail path so an admin can offer a fresh
+ * invite in the same click, instead of reactivating into a dead end.
+ */
+export async function reactivateDriverAndResendInvite(userId: string, email: string) {
+  await toggleUserActive(userId, true);
+  // resendInvite redirects on completion (success or auth failure), so it
+  // always has the last word here — nothing after this call will run.
+  await resendInvite(email, "driver");
+}
+
+/**
  * Wraps deactivateDriverAndFreeEmail for a driver's own Account page —
  * self-service, always targets the caller's own id. Signs them out
  * immediately afterwards: the ban and password reset block future
