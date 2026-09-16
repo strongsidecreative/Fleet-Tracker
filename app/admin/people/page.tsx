@@ -200,7 +200,7 @@ export default async function AdminPeoplePage({
                   {d.active && (
                     <form action={deactivateDriverFromAdmin.bind(null, d.id)}>
                       <ConfirmSubmitButton
-                        confirmMessage={`Deactivate ${d.name}? This can't be undone. They'll be logged out permanently and their email will be free to invite again — right away, to the same person or someone new. All their trips, bookings, incidents, and checks stay exactly as they are.`}
+                        confirmMessage={`Deactivate ${d.name}? Can't be undone. Frees up their email to invite again. Their trip, booking, incident and check history stays.`}
                         className="text-xs font-medium text-rust underline"
                       >
                         Deactivate

@@ -3,11 +3,11 @@
 import { useRef } from "react";
 
 // A plain ConfirmSubmitButton can only gate one action behind one
-// window.confirm. Reactivating a driver needs a second question first:
+// window.confirm. Reactivating a driver needs a second, short question:
 // most drivers were deactivated the new way (see deactivateDriverAndFreeEmail
 // in ../admin/users/actions.ts), which already replaced their email/password,
-// so flipping `active` back on alone won't let them log back in. This asks
-// that as a second confirm and submits to whichever hidden form matches the
+// so flipping `active` back on alone won't let them log back in. This keeps
+// both prompts short and submits to whichever hidden form matches the
 // answer — reusing the existing resendInvite/resetPasswordForEmail path
 // rather than inventing a new one.
 export default function ReactivateConfirm({
@@ -30,7 +30,7 @@ export default function ReactivateConfirm({
     }
 
     const alsoInvite = window.confirm(
-      `Also send ${name} a fresh invite email? Do this unless you know their old login still works — most drivers deactivated since accounts started freeing their email will need a new invite to log back in.`
+      `Also send ${name} a new invite email? Needed unless their old login still works.`
     );
 
     if (alsoInvite) {
