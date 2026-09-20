@@ -276,6 +276,10 @@ nav.links a:focus-visible{
           </div>
         </div>
       </div>
+      <div class="install-note" id="get-started" style="margin-top:18px;">
+        <div class="badge sm"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></svg></div>
+        <div><strong>Get started</strong> &mdash; installed? Open the app and sign in to get going. <a href="https://fleet-tracker-liard.vercel.app" target="_blank" rel="noopener">Open App &#8599;</a></div>
+      </div>
   </div>
 </section>
 

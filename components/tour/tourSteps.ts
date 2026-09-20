@@ -60,7 +60,7 @@ export const driverTourSteps: TourStep[] = [
     target: "[data-tour='nav-home']",
     title: "Home",
     content: "Takes you back to your dashboard — your current trip, recent stats, and quick actions.",
-    placement: "top",
+    placement: "bottom",
   },
   {
     id: "nav-trips",
@@ -68,7 +68,7 @@ export const driverTourSteps: TourStep[] = [
     target: "[data-tour='nav-trips']",
     title: "My Trips",
     content: "A full history of every trip you've logged, with start and end odometer readings.",
-    placement: "top",
+    placement: "bottom",
   },
   {
     id: "nav-bookings",
@@ -76,7 +76,7 @@ export const driverTourSteps: TourStep[] = [
     target: "[data-tour='nav-bookings']",
     title: "Bookings",
     content: "Reserve a vehicle ahead of time so it's available when you need it, and see bookings awaiting admin approval.",
-    placement: "top",
+    placement: "bottom",
   },
   {
     id: "nav-vehicles",
@@ -84,7 +84,7 @@ export const driverTourSteps: TourStep[] = [
     target: "[data-tour='nav-vehicles']",
     title: "Vehicles",
     content: "Browse every vehicle in the fleet, including which ones are currently available.",
-    placement: "top",
+    placement: "bottom",
   },
   {
     id: "nav-account",
@@ -92,7 +92,7 @@ export const driverTourSteps: TourStep[] = [
     target: "[data-tour='nav-account']",
     title: "Account",
     content: "Your profile, licence details, and notification settings live here. You can also replay this tour any time from this page.",
-    placement: "top",
+    placement: "bottom",
   },
   {
     id: "finish",
