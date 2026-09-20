@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverEmailFromAdmin } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin } from "../users/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SwipeableRow from "@/components/SwipeableRow";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
@@ -150,20 +150,21 @@ export default async function AdminPeoplePage({
           const active = activeTrips?.find((t) => t.driver_id === d.id);
           const licence = licences?.find((l) => l.driver_id === d.id);
           const severity = licence ? licenceSeverity(licence.expiry_date) : null;
-          // Deactivating already frees a driver's real email at the auth
-          // level — removeDriverEmail just scrubs the last visible copy of
-          // it out of `profiles.email` too, mirroring in the same
-          // never-real placeholder domain auth email already uses.
-          const emailRemoved = d.email.endsWith("@fleet-tracker.invalid");
+          // A removed driver's email is swapped to a never-real placeholder
+          // (see removeDriverPersonalInfo) — used here to tell "already
+          // removed" apart from "just deactivated, not removed yet".
+          const personalInfoRemoved = d.email.endsWith("@fleet-tracker.invalid");
 
           // Driver deactivation is one-way (see deactivateDriverFromAdmin) —
           // it already frees up their real email at the auth level for a
           // fresh invite. Remove is a separate, explicit next step for a
-          // deactivated driver: it scrubs the real address out of
-          // `profiles.email` too, so nothing of it is left in the database.
-          // Once removed there's nothing left to reactivate into — inviting
-          // that person (or anyone else) back happens through the normal
-          // Add Driver flow, since the address is fully free.
+          // deactivated driver: it clears both their real email and their
+          // name — everything personally identifying — so nothing of it is
+          // left in the database, while every trip, booking, check and
+          // fuel log they're attached to stays untouched. Once removed
+          // there's nothing left to reactivate into — inviting that
+          // person (or anyone else) back happens through the normal Add
+          // Driver flow, since the address is fully free.
           //
           // These live in the swipe-reveal actions strip rather than as
           // inline buttons — swipe the row left to see them.
@@ -189,10 +190,10 @@ export default async function AdminPeoplePage({
                   </ConfirmSubmitButton>
                 </form>
               )}
-              {!d.active && !emailRemoved && (
-                <form action={removeDriverEmailFromAdmin.bind(null, d.id)} className="flex">
+              {!d.active && !personalInfoRemoved && (
+                <form action={removeDriverPersonalInfoFromAdmin.bind(null, d.id)} className="flex">
                   <ConfirmSubmitButton
-                    confirmMessage={`Remove ${d.name}'s email? Can't be undone. You can invite this address again afterwards.`}
+                    confirmMessage={`Remove ${d.name}'s email and name? Can't be undone. Their trip, booking, check and fuel history stays, but every record will show as "Removed Driver" from now on. The email address is free to invite again afterwards.`}
                     className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
                   >
                     Remove
