@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import type { EmailOtpType } from "@supabase/supabase-js";
 
 export default function ResetPasswordForm() {
   const supabase = createClient();
@@ -16,13 +17,23 @@ export default function ResetPasswordForm() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Supabase appends error=...&error_description=... instead of a session
-    // when the link is invalid, expired, or already used (e.g. consumed by
-    // an email client's link-scanner before the real click). Check both the
-    // query string and the hash fragment, since Supabase uses different
-    // formats depending on flow type.
     const searchParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+
+    // Supabase appends error=...&error_description=... instead of a session
+    // when the link is invalid, expired, or already used. This is also what
+    // shows up when the invite/reset link's one-time token has already been
+    // consumed by something other than the person themselves clicking it —
+    // e.g. Gmail/Outlook's automatic link-scanning, which fetches every link
+    // in an incoming email server-side to check it for phishing/malware
+    // *before* the recipient ever opens the message. Supabase's classic
+    // {{ .ConfirmationURL }} link points straight at a stateful, single-use
+    // verify endpoint on Supabase's own domain, so that automated fetch is
+    // indistinguishable from the real click and burns the token — the person
+    // then opens the email and gets exactly this "expired" error on a link
+    // that's actually only ever been "used" by a bot. See the token_hash
+    // branch below for the fix (see also the two email templates, updated to
+    // point at this page directly instead of Supabase's /verify endpoint).
     const errorDescription =
       searchParams.get("error_description") || hashParams.get("error_description");
     if (errorDescription) {
@@ -30,6 +41,28 @@ export default function ResetPasswordForm() {
       return;
     }
 
+    // New-style link: the email templates now point straight at this page
+    // with ?token_hash=...&type=... instead of Supabase's own /verify
+    // endpoint (see comment above for why). A mail scanner fetching *this*
+    // URL just downloads an inert page — it doesn't run this component's JS,
+    // so it can't consume the token. The token is only ever exchanged here,
+    // client-side, when a real browser actually loads and runs this page.
+    const tokenHash = searchParams.get("token_hash");
+    const type = searchParams.get("type") as EmailOtpType | null;
+    if (tokenHash && type) {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(({ error: verifyError }) => {
+        if (verifyError) {
+          setLinkDead(verifyError.message || "This link has expired or has already been used.");
+          return;
+        }
+        setReady(true);
+      });
+      return;
+    }
+
+    // Old-style link (Supabase-hosted /verify redirecting back with tokens
+    // in the URL fragment). Kept as a fallback for any links already sent
+    // before the templates were switched to token_hash above.
     // Recovery links (resetPasswordForEmail) fire PASSWORD_RECOVERY.
     // Invite links (inviteUserByEmail) fire SIGNED_IN instead — both mean
     // a valid session now exists and the form should show.
