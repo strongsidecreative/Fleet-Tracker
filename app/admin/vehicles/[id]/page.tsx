@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import EditVehicleForm from "./EditVehicleForm";
+import RemoveVehicleSection from "./RemoveVehicleSection";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import BackButton from "@/components/BackButton";
+import ErrorBanner from "@/components/ErrorBanner";
 
 export default async function VehicleDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -42,11 +45,16 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
 
   return (
     <div>
-      <h1 className="font-display text-xl font-bold text-ink">{vehicle.name}</h1>
+      <BackButton label="Back to Vehicles" />
+      <ErrorBanner />
+      <h1 className="mt-2 font-display text-xl font-bold text-ink">{vehicle.name}</h1>
       <p className="mb-4 text-xs text-steel">
         {vehicle.registration} · Odometer {vehicle.current_odometer.toLocaleString("en-NZ")} KM
       </p>
-      <div className="mb-4 flex gap-2">
+      {/* All three are equally-important navigation actions, not one
+          primary + two secondary — styled identically so none of them
+          reads as greyed-out/disabled next to the others. */}
+      <div className="mb-4 flex flex-wrap gap-2">
         <a
           href={`/admin/vehicles/${vehicle.id}/qr`}
           className="inline-block rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
@@ -56,7 +64,7 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
         {features.vehicle_checks && (
           <a
             href={`/admin/vehicle-checks?vehicleId=${vehicle.id}`}
-            className="inline-block rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink"
+            className="inline-block rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
           >
             Vehicle Check History
           </a>
@@ -64,7 +72,7 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
         {features.fuel_tracking && (
           <a
             href={`/admin/fuel?vehicleId=${vehicle.id}`}
-            className="inline-block rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink"
+            className="inline-block rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
           >
             Fuel History
           </a>
@@ -99,6 +107,10 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
       )}
 
       <EditVehicleForm vehicle={vehicle} />
+
+      <div className="mt-4">
+        <RemoveVehicleSection vehicleId={vehicle.id} vehicleName={vehicle.name} />
+      </div>
     </div>
   );
 }
