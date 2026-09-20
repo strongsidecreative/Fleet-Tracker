@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import BackButton from "@/components/BackButton";
 
 export default async function ReportViewPage({
   searchParams,
@@ -97,7 +98,8 @@ export default async function ReportViewPage({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <BackButton label="Back to Reports" />
+      <div className="mb-4 mt-2 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">{searchParams.label ?? `${start} to ${end}`}</h1>
         <a
           href={`/admin/reports/export?start=${start}&end=${end}`}

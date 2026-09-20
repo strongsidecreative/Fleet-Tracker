@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ReportIncidentForm from "./ReportIncidentForm";
+import BackButton from "@/components/BackButton";
 
 export default async function ReportIncidentPage({ searchParams }: { searchParams: { vehicleId?: string } }) {
   const supabase = createClient();
@@ -11,7 +12,8 @@ export default async function ReportIncidentPage({ searchParams }: { searchParam
 
   return (
     <div>
-      <h1 className="mb-1 font-display text-xl font-bold text-ink">Report an Incident</h1>
+      <BackButton label="Back to Home" />
+      <h1 className="mb-1 mt-2 font-display text-xl font-bold text-ink">Report an Incident</h1>
       <p className="mb-4 text-sm text-steel">This goes straight to the admin as a notification.</p>
       <ReportIncidentForm vehicles={vehicles ?? []} defaultVehicleId={searchParams.vehicleId} />
     </div>

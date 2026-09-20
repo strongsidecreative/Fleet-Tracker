@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import EditBookingForm from "./EditBookingForm";
+import BackButton from "@/components/BackButton";
 
 export default async function EditBookingPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -21,7 +22,8 @@ export default async function EditBookingPage({ params }: { params: { id: string
 
   return (
     <div>
-      <h1 className="mb-4 font-display text-xl font-bold text-ink">Edit Booking</h1>
+      <BackButton label="Back to Bookings" />
+      <h1 className="mb-4 mt-2 font-display text-xl font-bold text-ink">Edit Booking</h1>
       <EditBookingForm booking={booking} vehicles={vehicles ?? []} />
     </div>
   );

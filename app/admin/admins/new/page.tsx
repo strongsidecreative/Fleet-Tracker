@@ -1,9 +1,11 @@
 import NewAdminForm from "./NewAdminForm";
+import BackButton from "@/components/BackButton";
 
 export default function NewAdminPage() {
   return (
     <div>
-      <h1 className="mb-4 font-display text-xl font-bold text-ink">Add Admin</h1>
+      <BackButton label="Back to People" />
+      <h1 className="mb-4 mt-2 font-display text-xl font-bold text-ink">Add Admin</h1>
       <NewAdminForm />
     </div>
   );

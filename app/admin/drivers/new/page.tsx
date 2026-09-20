@@ -1,9 +1,11 @@
 import NewDriverForm from "./NewDriverForm";
+import BackButton from "@/components/BackButton";
 
 export default function NewDriverPage() {
   return (
     <div>
-      <h1 className="mb-4 font-display text-xl font-bold text-ink">Add Driver</h1>
+      <BackButton label="Back to People" />
+      <h1 className="mb-4 mt-2 font-display text-xl font-bold text-ink">Add Driver</h1>
       <NewDriverForm />
     </div>
   );

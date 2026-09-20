@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import BackButton from "@/components/BackButton";
 
 export default async function VehicleCheckHistoryPage() {
   const supabase = createClient();
@@ -15,7 +16,8 @@ export default async function VehicleCheckHistoryPage() {
 
   return (
     <div>
-      <h1 className="mb-4 font-display text-xl font-bold text-ink">My Vehicle Checks</h1>
+      <BackButton label="Back" />
+      <h1 className="mb-4 mt-2 font-display text-xl font-bold text-ink">My Vehicle Checks</h1>
       <div className="space-y-2">
         {(!checks || checks.length === 0) && <p className="text-sm text-steel">No vehicle checks completed yet.</p>}
         {checks?.map((c) => (

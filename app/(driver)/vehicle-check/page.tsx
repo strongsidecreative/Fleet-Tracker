@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import CheckForm from "./CheckForm";
+import BackButton from "@/components/BackButton";
 
 export default async function VehicleCheckPage({ searchParams }: { searchParams: { vehicleId?: string } }) {
   const supabase = createClient();
@@ -10,7 +11,8 @@ export default async function VehicleCheckPage({ searchParams }: { searchParams:
 
     return (
       <div>
-        <div className="mb-1 flex items-center justify-between">
+        <BackButton label="Back to Home" />
+        <div className="mb-1 mt-2 flex items-center justify-between">
           <h1 className="font-display text-xl font-bold text-ink">Vehicle Check</h1>
           <Link href="/vehicle-check/history" className="text-xs font-medium text-brand underline">
             My History

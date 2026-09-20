@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import VehicleCheckDetail from "@/components/VehicleCheckDetail";
 import SuccessBanner from "@/components/SuccessBanner";
+import BackButton from "@/components/BackButton";
 
 export default async function DriverVehicleCheckDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -22,6 +23,7 @@ export default async function DriverVehicleCheckDetailPage({ params }: { params:
 
   return (
     <div>
+      <BackButton label="Back" />
       <SuccessBanner />
       <h1 className="mb-4 font-display text-xl font-bold text-ink">Vehicle Check</h1>
       <VehicleCheckDetail check={check} items={items ?? []} />

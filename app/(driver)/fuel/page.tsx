@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/nz-time";
+import BackButton from "@/components/BackButton";
 
 export default async function MyFuelPage() {
   const supabase = createClient();
@@ -20,7 +21,8 @@ export default async function MyFuelPage() {
 
   return (
     <div>
-      <div className="mb-4">
+      <BackButton label="Back to Account" />
+      <div className="mb-4 mt-2">
         <h1 className="font-display text-xl font-bold text-ink">My Fuel</h1>
         <p className="mt-1 text-xs text-steel">Add fuel from the Current Vehicle card while you have one checked out.</p>
       </div>

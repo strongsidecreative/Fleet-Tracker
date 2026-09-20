@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import LicenceSection from "./LicenceSection";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
+import BackButton from "@/components/BackButton";
 
 export default async function DriverDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -31,6 +32,7 @@ export default async function DriverDetailPage({ params }: { params: { id: strin
 
   return (
     <div className="space-y-5">
+      <BackButton label="Back to People" />
       <div>
         <h1 className="font-display text-xl font-bold text-ink">
           {driver.name} {!driver.active && <span className="text-sm text-steel">(inactive)</span>}

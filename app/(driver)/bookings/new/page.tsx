@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import NewBookingForm from "./NewBookingForm";
+import BackButton from "@/components/BackButton";
 
 export default async function NewBookingPage() {
   const supabase = createClient();
@@ -10,7 +11,8 @@ export default async function NewBookingPage() {
 
   return (
     <div>
-      <h1 className="mb-1 font-display text-xl font-bold text-ink">Book a Vehicle</h1>
+      <BackButton label="Back to Bookings" />
+      <h1 className="mb-1 mt-2 font-display text-xl font-bold text-ink">Book a Vehicle</h1>
       <p className="mb-4 text-sm text-steel">
         Your request goes to an admin for approval before it's confirmed.
       </p>

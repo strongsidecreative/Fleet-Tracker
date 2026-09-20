@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ApprovalActions from "./ApprovalActions";
+import BackButton from "@/components/BackButton";
 
 export default async function BookingApprovalPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -32,6 +33,7 @@ export default async function BookingApprovalPage({ params }: { params: { id: st
 
   return (
     <div className="space-y-4">
+      <BackButton label="Back to Bookings" />
       <div>
         <h1 className="font-display text-xl font-bold text-ink">{booking.title || "Booking"}</h1>
         <p className="text-xs text-steel">Submitted {new Date(booking.created_at).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</p>
