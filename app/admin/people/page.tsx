@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin, deletePermanentlyFromAdmin } from "../users/actions";
+import { driverIdsWithHistory } from "../users/history";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SwipeableRow from "@/components/SwipeableRow";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
@@ -119,6 +120,18 @@ export default async function AdminPeoplePage({
     supabase.from("driver_licences").select("*"),
   ]);
 
+  // Which inactive drivers can be permanently deleted (zero trip/booking/
+  // incident/check/fuel history) vs which are stuck as a placeholder
+  // forever because the database won't let a row with real history be
+  // deleted — see history.ts. Only computed for inactive drivers, and
+  // only when the service role key is set; an empty Set just means the
+  // "Delete permanently" action stays hidden, never that it's offered
+  // incorrectly.
+  const inactiveDriverIds = (drivers ?? []).filter((d) => !d.active).map((d) => d.id);
+  const driversWithHistory = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? await driverIdsWithHistory(createAdminClient(), inactiveDriverIds)
+    : new Set(inactiveDriverIds);
+
   const now = new Date();
   const weekStart = startOfWeekNZ(now);
   const monthStart = startOfMonthNZ(now);
@@ -197,6 +210,16 @@ export default async function AdminPeoplePage({
                     className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
                   >
                     Remove
+                  </ConfirmSubmitButton>
+                </form>
+              )}
+              {!d.active && !driversWithHistory.has(d.id) && (
+                <form action={deletePermanentlyFromAdmin.bind(null, d.id)} className="flex">
+                  <ConfirmSubmitButton
+                    confirmMessage={`Permanently delete ${d.name}? This removes them completely — can't be undone, and there's no record left afterwards. They have no trip, booking, check or fuel history, so nothing else is affected.`}
+                    className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+                  >
+                    Delete permanently
                   </ConfirmSubmitButton>
                 </form>
               )}

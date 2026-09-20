@@ -6,6 +6,7 @@ import { createAnonClient } from "@/lib/supabase/anon";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
+import { driverHasHistory } from "./history";
 
 export async function toggleUserActive(userId: string, newActive: boolean) {
   const supabase = createClient();
@@ -100,23 +101,30 @@ async function requireSelfOrOwnOrgDriver(targetUserId: string): Promise<{ error:
 }
 
 /**
- * Deactivating a driver used to just flip `profiles.active` off (same as
- * an admin) — but that leaves their real email tied up on an account that
- * can never really come back the same way, since re-inviting the same
- * address fails with "a user with this email already exists." This does
- * both in one step: blocks their login (same as before) AND frees their
- * real email address so a fresh invite can go out to it right away —
- * either to the same person starting over, or someone else. The `profiles`
- * row and every trip/booking/incident/check tied to it are left exactly
- * as they are (the database won't let a driver with any history be
- * deleted anyway) — only the login itself goes away, permanently.
+ * Deactivating a driver with NO trip/booking/incident/check/fuel history
+ * now removes them completely — the profiles row, and the auth login,
+ * gone outright, rather than left behind as an "Inactive" placeholder
+ * forever. That's the common case (someone added by mistake, or who
+ * never actually drove), and there's nothing worth keeping a record of.
+ *
+ * A driver WITH any history can't go this route — the database itself
+ * won't allow deleting a profiles row that other tables still reference
+ * (see history.ts), and it shouldn't: that history is real records other
+ * people relied on. For that case this falls back to the original
+ * behaviour: block their login and free their real email address so a
+ * fresh invite can go out to it right away, leaving the `profiles` row
+ * and everything tied to it exactly as it is. That's also the fallback
+ * if the delete attempt fails for any other reason — this never leaves
+ * an account in a broken half-state.
  *
  * Deliberately driver-only: an admin's own login isn't touched by this —
  * they keep the plain reversible Deactivate/Reactivate toggle above,
  * since losing admin access by accident is a much bigger deal than a
  * driver needing a fresh invite.
  */
-export async function deactivateDriverAndFreeEmail(userId: string): Promise<{ error: string | null }> {
+export async function deactivateDriverAndFreeEmail(
+  userId: string
+): Promise<{ error: string | null; deleted?: boolean }> {
   const authCheck = await requireSelfOrOwnOrgDriver(userId);
   if (authCheck.error) {
     return authCheck;
@@ -130,6 +138,21 @@ export async function deactivateDriverAndFreeEmail(userId: string): Promise<{ er
   }
 
   const adminClient = createAdminClient();
+
+  const hasHistory = await driverHasHistory(adminClient, userId);
+  if (!hasHistory) {
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
+    if (!deleteError) {
+      // profiles.id -> auth.users(id) on delete cascade, so the profile
+      // row is already gone too — nothing left to update.
+      revalidatePath("/admin/people");
+      revalidatePath("/account");
+      return { error: null, deleted: true };
+    }
+    // Fall through to the placeholder flow below rather than surface a
+    // dead end — e.g. a table was missed in history.ts, or some other
+    // FK this session doesn't know about. Deactivating still succeeds.
+  }
 
   // Placeholder is keyed on the user's own id, so it can never collide
   // with another placeholder. email_confirm:true skips sending a
@@ -153,7 +176,7 @@ export async function deactivateDriverAndFreeEmail(userId: string): Promise<{ er
   revalidatePath("/admin/people");
   revalidatePath("/account");
 
-  return { error: null };
+  return { error: null, deleted: false };
 }
 
 /**
@@ -168,7 +191,11 @@ export async function deactivateDriverFromAdmin(userId: string) {
     redirect(`/admin/people?role=driver&error=${encodeURIComponent(result.error)}`);
   }
   redirect(
-    `/admin/people?role=driver&success=${encodeURIComponent("Driver deactivated. Their email is free to invite again.")}`
+    `/admin/people?role=driver&success=${encodeURIComponent(
+      result.deleted
+        ? "Driver removed — they had no trip history, so nothing was left behind."
+        : "Driver deactivated. Their email is free to invite again."
+    )}`
   );
 }
 
@@ -245,6 +272,88 @@ export async function removeDriverPersonalInfoFromAdmin(userId: string) {
   redirect(
     `/admin/people?role=driver&success=${encodeURIComponent("Personal details removed. The email address is free to invite again any time from Add Driver.")}`
   );
+}
+
+/**
+ * Hard-deletes an already-deactivated driver outright — the profiles row
+ * and the auth login, gone completely, no "Inactive" placeholder left
+ * behind. For drivers deactivated before deactivateDriverAndFreeEmail
+ * started doing this automatically (see there), or any other case where
+ * one is somehow still sitting inactive with no history attached.
+ *
+ * Admin-only (not self-service — a driver deactivating their own account
+ * goes through deactivateOwnDriverAccount, which already deletes outright
+ * when there's no history) and only for a driver already inactive, as a
+ * safety rail against accidentally deleting someone still in use.
+ */
+export async function deletePermanentlyFromAdmin(userId: string) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role, organisation_id")
+    .eq("id", user!.id)
+    .single();
+
+  if (callerProfile?.role !== "admin") {
+    redirect(`/admin/people?role=driver&error=${encodeURIComponent("You're not authorised to do that.")}`);
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    redirect(
+      `/admin/people?role=driver&error=${encodeURIComponent(
+        "The service role key isn't set up yet, so this driver can't be deleted. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again."
+      )}`
+    );
+  }
+
+  const adminClient = createAdminClient();
+
+  const { data: targetProfile } = await adminClient
+    .from("profiles")
+    .select("role, active, organisation_id")
+    .eq("id", userId)
+    .single();
+
+  if (
+    !targetProfile ||
+    targetProfile.role !== "driver" ||
+    targetProfile.organisation_id !== callerProfile.organisation_id
+  ) {
+    redirect(`/admin/people?role=driver&error=${encodeURIComponent("You're not authorised to do that.")}`);
+  }
+
+  if (targetProfile!.active) {
+    redirect(
+      `/admin/people?role=driver&error=${encodeURIComponent("Deactivate this driver before deleting them.")}`
+    );
+  }
+
+  const hasHistory = await driverHasHistory(adminClient, userId);
+  if (hasHistory) {
+    redirect(
+      `/admin/people?role=driver&error=${encodeURIComponent(
+        "This driver has trip, booking, check or fuel history and can't be permanently deleted."
+      )}`
+    );
+  }
+
+  const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
+  if (deleteError) {
+    redirect(
+      `/admin/people?role=driver&error=${encodeURIComponent("Something went wrong deleting this driver. Please try again.")}`
+    );
+  }
+
+  revalidatePath("/admin/people");
+  redirect(`/admin/people?role=driver&success=${encodeURIComponent("Driver permanently deleted.")}`);
 }
 
 /**
