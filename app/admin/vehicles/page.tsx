@@ -13,6 +13,72 @@ export default async function AdminVehiclesPage() {
 
   const activeTripFor = (vehicleId: string) => activeTrips?.find((t) => t.vehicle_id === vehicleId);
 
+  const VehicleRow = ({ v }: { v: NonNullable<typeof vehicles>[number] }) => {
+    const active = activeTripFor(v.id);
+    const severity = overallSeverity(v);
+
+    return (
+      <Link
+        key={v.id}
+        href={`/admin/vehicles/${v.id}`}
+        className="block rounded-xl border border-steel/20 bg-white p-3"
+      >
+        <div className="flex items-center justify-between gap-3">
+          {v.photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={v.photo_url}
+              alt={v.name}
+              loading="lazy"
+              decoding="async"
+              className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
+            />
+          ) : (
+            <div className="h-12 w-12 flex-shrink-0 rounded-lg bg-paper" />
+          )}
+          <div className="flex-1">
+            <p className="font-medium text-ink">{v.name}</p>
+            <p className="text-xs text-steel">
+              {active
+                ? `${active.driver?.name} · since ${new Date(active.start_datetime).toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}`
+                : `Last KM: ${v.current_odometer.toLocaleString("en-NZ")}`}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {v.active ? (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                  active ? "bg-amber/15 text-amber" : "bg-track/15 text-track"
+                }`}
+              >
+                {active ? "In Use" : "Available"}
+              </span>
+            ) : (
+              <span className="rounded-full bg-steel/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-steel">
+                Removed
+              </span>
+            )}
+            {severity !== "ok" && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${SEVERITY_BADGE_CLASS[severity]}`}>
+                {SEVERITY_LABEL[severity]}
+              </span>
+            )}
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
+  // Split active from removed instead of mixing them into one list with
+  // an "(inactive)" tag — a vehicle taken out of the fleet via "Remove
+  // Vehicle" (archiveVehicle, actions.ts) should stop showing up as an
+  // ordinary row day to day. It's kept findable in its own "Removed"
+  // section (rather than dropped from the query entirely) so an admin
+  // can still open it and flip "Vehicle is active" back on. Mirrors the
+  // Active/Pending/Inactive split on the People page for the same reason.
+  const activeVehicles = (vehicles ?? []).filter((v) => v.active);
+  const removedVehicles = (vehicles ?? []).filter((v) => !v.active);
+
   return (
     <div>
       <SuccessBanner />
@@ -35,58 +101,23 @@ export default async function AdminVehiclesPage() {
       )}
 
       <div className="space-y-2">
-        {vehicles?.map((v) => {
-          const active = activeTripFor(v.id);
-          const severity = overallSeverity(v);
-
-          return (
-            <Link
-              key={v.id}
-              href={`/admin/vehicles/${v.id}`}
-              className="block rounded-xl border border-steel/20 bg-white p-3"
-            >
-              <div className="flex items-center justify-between gap-3">
-                {v.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={v.photo_url}
-                    alt={v.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
-                  />
-                ) : (
-                  <div className="h-12 w-12 flex-shrink-0 rounded-lg bg-paper" />
-                )}
-                <div className="flex-1">
-                  <p className="font-medium text-ink">
-                    {v.name} {!v.active && <span className="text-xs text-steel">(inactive)</span>}
-                  </p>
-                  <p className="text-xs text-steel">
-                    {active
-                      ? `${active.driver?.name} · since ${new Date(active.start_datetime).toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}`
-                      : `Last KM: ${v.current_odometer.toLocaleString("en-NZ")}`}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-                      active ? "bg-amber/15 text-amber" : "bg-track/15 text-track"
-                    }`}
-                  >
-                    {active ? "In Use" : "Available"}
-                  </span>
-                  {severity !== "ok" && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${SEVERITY_BADGE_CLASS[severity]}`}>
-                      {SEVERITY_LABEL[severity]}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+        {activeVehicles.map((v) => (
+          <VehicleRow key={v.id} v={v} />
+        ))}
       </div>
+
+      {removedVehicles.length > 0 && (
+        <div className="mt-5 space-y-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-steel">
+            Removed ({removedVehicles.length})
+          </p>
+          <div className="space-y-2 opacity-60">
+            {removedVehicles.map((v) => (
+              <VehicleRow key={v.id} v={v} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
