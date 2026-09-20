@@ -173,14 +173,21 @@ export async function deactivateDriverFromAdmin(userId: string) {
 }
 
 /**
- * Deactivating a driver already frees their real email at the auth level
- * (see deactivateDriverAndFreeEmail) — an admin could invite that address
- * again right away. What's left behind is the real address still sitting
- * in `profiles.email`, used for display and exports. This scrubs that last
- * copy by mirroring the (already-placeholder) auth email onto the profile
- * row, so the real address isn't stored anywhere once an admin chooses to
- * remove it. Deliberately a separate, explicit step from Deactivate —
- * driver-only, and only meaningful once a driver is already deactivated.
+ * Frees a deactivated driver's real email address for good, at both
+ * levels: the auth login (so it can be invited again) and `profiles.email`
+ * (used for display and exports, so the real address isn't left sitting
+ * in the database).
+ *
+ * Does the full swap itself rather than assuming deactivateDriverAndFreeEmail
+ * already did it — a driver deactivated the OLD way (toggleUserActive
+ * alone, before email-freeing existed) still has their real address live
+ * on their auth user, not a placeholder, and reusing that unchanged
+ * address in profiles.email would be a no-op: re-inviting them would
+ * still fail with "a user with this email already exists." Running the
+ * real swap here, unconditionally, fixes both cases the same way and
+ * makes Remove safe to click regardless of how a driver was deactivated.
+ * Deliberately a separate, explicit step from Deactivate — driver-only,
+ * and only meaningful once a driver is already deactivated.
  */
 export async function removeDriverEmail(userId: string): Promise<{ error: string | null }> {
   const authCheck = await requireSelfOrOwnOrgDriver(userId);
@@ -197,12 +204,24 @@ export async function removeDriverEmail(userId: string): Promise<{ error: string
 
   const adminClient = createAdminClient();
 
-  const { data: authUser, error: getError } = await adminClient.auth.admin.getUserById(userId);
-  if (getError || !authUser?.user?.email) {
+  // Keyed on the user's own id, so it can never collide with another
+  // placeholder — same pattern as deactivateDriverAndFreeEmail, just its
+  // own prefix so the two are distinguishable if it ever matters.
+  const placeholderEmail = `removed-${userId}@fleet-tracker.invalid`;
+  const randomPassword = randomBytes(24).toString("hex");
+
+  const { error: authError } = await adminClient.auth.admin.updateUserById(userId, {
+    email: placeholderEmail,
+    password: randomPassword,
+    email_confirm: true,
+    ban_duration: "87600h",
+  });
+
+  if (authError) {
     return { error: "Something went wrong removing this driver's email. Please try again." };
   }
 
-  await adminClient.from("profiles").update({ email: authUser.user.email }).eq("id", userId);
+  await adminClient.from("profiles").update({ email: placeholderEmail }).eq("id", userId);
 
   revalidatePath("/admin/people");
 
