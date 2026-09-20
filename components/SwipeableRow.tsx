@@ -2,22 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 
+// How much of the actions strip stays peeking out at rest, so a row with
+// actions visibly looks swipeable instead of identical to one without —
+// the previous version looked exactly like a plain static row until you
+// happened to try dragging it.
+const PEEK_PX = 14;
+
 /**
  * iOS-Mail-style swipe-to-reveal actions. `children` is the row's normal
  * content (unchanged); `actions` are rendered off-screen to the right and
- * revealed by dragging the content left. Dragging past halfway snaps fully
- * open; releasing before that snaps back closed. Tapping/clicking the row
- * while open closes it instead of triggering whatever's underneath (the
- * Link to the driver's detail page) — same as the pattern this mirrors.
+ * revealed by dragging the content left. At rest, a small sliver of the
+ * actions strip (PEEK_PX) stays visible as a hint that the row swipes —
+ * dragging past halfway from there snaps fully open; releasing earlier
+ * snaps back to that same peek, never fully flush. Tapping/clicking the
+ * row while fully open closes it instead of triggering whatever's
+ * underneath (the Link to the driver's/vehicle's detail page) — same as
+ * the pattern this mirrors. A row with no actions (actions has no
+ * rendered width) behaves like a plain static row, no peek shown.
  *
  * Built on Pointer Events (not touch-only) so this also works with a
  * mouse — this admin page is used from a laptop as often as a phone, and
  * a swipe-only gesture would leave desktop admins with no way to reach
  * these actions at all.
- *
- * Actions are measured (not given a fixed width) so this works for any
- * number of buttons of any label length — pass real form/button markup,
- * same as would've gone inline before.
  */
 export default function SwipeableRow({
   children,
@@ -34,13 +40,18 @@ export default function SwipeableRow({
   const isDragging = useRef(false);
   const draggedPastThreshold = useRef(false);
 
+  const restOffset = openWidth > 0 ? -PEEK_PX : 0;
+
   // Re-measure whenever the actions themselves change (e.g. a row flips
   // from active to inactive after a server action, swapping Deactivate
-  // for Remove) — not just on first mount.
+  // for Remove) — not just on first mount. Snaps back to the (possibly
+  // new) rest position whenever that happens, so a row that just lost
+  // its actions doesn't stay stuck peeking at nothing.
   useEffect(() => {
-    if (actionsRef.current) {
-      setOpenWidth(actionsRef.current.scrollWidth);
-    }
+    const width = actionsRef.current?.scrollWidth ?? 0;
+    setOpenWidth(width);
+    setTranslateX(width > 0 ? -PEEK_PX : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actions]);
 
   const clamp = (value: number) => Math.min(0, Math.max(-openWidth, value));
@@ -65,8 +76,10 @@ export default function SwipeableRow({
   const endDrag = () => {
     if (!isDragging.current) return;
     isDragging.current = false;
-    setTranslateX((current) => (current < -openWidth / 2 ? -openWidth : 0));
+    setTranslateX((current) => (current < -openWidth / 2 ? -openWidth : restOffset));
   };
+
+  const isFullyOpen = translateX <= -openWidth / 2 && openWidth > 0;
 
   return (
     <div className="relative overflow-hidden rounded-xl">
@@ -82,12 +95,14 @@ export default function SwipeableRow({
         onPointerCancel={endDrag}
         onClickCapture={(e) => {
           // A real drag shouldn't also fire a click on release. And a tap
-          // while already open just closes the drawer, same as iOS —
-          // stop it from also activating whatever's underneath (the Link).
-          if (draggedPastThreshold.current || translateX !== 0) {
+          // while fully open just closes the drawer, same as iOS — stop
+          // it from also activating whatever's underneath (the Link). The
+          // resting peek is small enough that a tap there should still
+          // navigate normally, not be swallowed by this.
+          if (draggedPastThreshold.current || isFullyOpen) {
             e.preventDefault();
             e.stopPropagation();
-            if (translateX !== 0) setTranslateX(0);
+            if (isFullyOpen) setTranslateX(restOffset);
             draggedPastThreshold.current = false;
           }
         }}
