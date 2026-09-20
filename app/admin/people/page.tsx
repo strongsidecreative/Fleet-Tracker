@@ -209,11 +209,7 @@ export default async function AdminPeoplePage({
                   <Link href={`/admin/drivers/${d.id}`} className="flex-1">
                     <p className="font-medium text-ink">
                       {d.name}{" "}
-                      {!d.active && (
-                        <span className="text-xs text-steel">
-                          (deactivated{emailRemoved ? ", email removed" : ""})
-                        </span>
-                      )}
+                      {!d.active && <span className="text-xs text-steel">(deactivated)</span>}
                     </p>
                     <p className="mt-0.5 text-xs text-steel">
                       {licence ? `${licence.licence_class ?? "—"} · Expires ${new Date(licence.expiry_date).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" })}` : "No licence on file"}
