@@ -32,7 +32,7 @@ export default async function DriverDetailPage({ params }: { params: { id: strin
 
   return (
     <div className="space-y-5">
-      <BackButton label="Back to People" />
+      <BackButton label="Back to Drivers" />
       <div>
         <h1 className="font-display text-xl font-bold text-ink">
           {driver.name} {!driver.active && <span className="text-sm text-steel">(inactive)</span>}
