@@ -113,3 +113,109 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
   revalidatePath("/admin/vehicles");
   redirect("/admin/vehicles?success=Vehicle updated");
 }
+
+/**
+ * Removes a vehicle from the active fleet without touching any of its
+ * history — every trip, booking, check and fuel log stays exactly as it
+ * is, same effect as unchecking "Vehicle is active" on the edit form
+ * above and saving. Kept as its own one-click action (rather than making
+ * admins go through the full edit form) so "Remove Vehicle" can offer
+ * this side by side with the permanent option below. Reversible any
+ * time from that same checkbox.
+ */
+export async function archiveVehicle(vehicleId: string): Promise<{ error: string | null }> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("vehicles")
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq("id", vehicleId);
+
+  if (error) {
+    return { error: "Something went wrong removing this vehicle from the fleet. Please try again." };
+  }
+
+  revalidatePath("/admin/vehicles");
+  revalidatePath(`/admin/vehicles/${vehicleId}`);
+  return { error: null };
+}
+
+export async function archiveVehicleFromAdmin(vehicleId: string) {
+  const result = await archiveVehicle(vehicleId);
+  if (result.error) {
+    redirect(`/admin/vehicles/${vehicleId}?error=${encodeURIComponent(result.error)}`);
+  }
+  redirect(`/admin/vehicles?success=${encodeURIComponent("Vehicle removed from the fleet. Its history is untouched.")}`);
+}
+
+/**
+ * Hard-deletes a vehicle and every record that points at it. No ON
+ * DELETE CASCADE is set up on these foreign keys, on purpose — this app
+ * treats trip/booking/check/fuel history as permanent by default (see
+ * e.g. fuel_logs' own "financial record, immutable" reasoning elsewhere),
+ * so a full cascade needs to be a deliberate, explicit action taken here,
+ * not a side effect of a schema constraint an admin might not know
+ * about. archiveVehicle above is the non-destructive alternative.
+ *
+ * Order matters — children before parents:
+ * 1. incident_reports — some rows reference vehicle_check_items via
+ *    source_vehicle_check_item_id (no cascade on that FK), so those need
+ *    to be gone before vehicle_checks/vehicle_check_items are deleted.
+ * 2. vehicle_checks — vehicle_check_items cascades automatically (it's
+ *    declared ON DELETE CASCADE from vehicle_checks in migration 0007).
+ * 3. fuel_logs — a fuel log's optional trip_id references
+ *    vehicle_usage(id) with no cascade, so this must go before step 5.
+ * 4. bookings and booking_series — order doesn't matter between these
+ *    two, both just need to be before vehicle_usage/vehicles.
+ * 5. vehicle_usage (trip history), then the vehicle row itself, last.
+ */
+export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ error: string | null }> {
+  const supabase = createClient();
+
+  const { data: activeTrip } = await supabase
+    .from("vehicle_usage")
+    .select("id")
+    .eq("vehicle_id", vehicleId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (activeTrip) {
+    return { error: "This vehicle has an active trip right now — it needs to be checked back in before it can be deleted." };
+  }
+
+  const deleteSteps: Array<{ label: string; run: () => Promise<{ error: { message: string } | null }> }> = [
+    { label: "incident reports", run: async () => await supabase.from("incident_reports").delete().eq("vehicle_id", vehicleId) },
+    { label: "vehicle checks", run: async () => await supabase.from("vehicle_checks").delete().eq("vehicle_id", vehicleId) },
+    { label: "fuel logs", run: async () => await supabase.from("fuel_logs").delete().eq("vehicle_id", vehicleId) },
+    { label: "bookings", run: async () => await supabase.from("bookings").delete().eq("vehicle_id", vehicleId) },
+    { label: "recurring booking series", run: async () => await supabase.from("booking_series").delete().eq("vehicle_id", vehicleId) },
+    { label: "trip history", run: async () => await supabase.from("vehicle_usage").delete().eq("vehicle_id", vehicleId) },
+  ];
+
+  for (const step of deleteSteps) {
+    const { error } = await step.run();
+    if (error) {
+      return {
+        error: `Something went wrong deleting this vehicle's ${step.label} (nothing further was deleted): ${error.message}`,
+      };
+    }
+  }
+
+  const { error } = await supabase.from("vehicles").delete().eq("id", vehicleId);
+  if (error) {
+    return {
+      error: "Every record for this vehicle was deleted, but removing the vehicle itself failed. Please try again.",
+    };
+  }
+
+  revalidatePath("/admin/vehicles");
+  return { error: null };
+}
+
+export async function deleteVehicleAndRecordsFromAdmin(vehicleId: string) {
+  const result = await deleteVehicleAndRecords(vehicleId);
+  if (result.error) {
+    redirect(`/admin/vehicles/${vehicleId}?error=${encodeURIComponent(result.error)}`);
+  }
+  redirect(`/admin/vehicles?success=${encodeURIComponent("Vehicle and all its records deleted.")}`);
+}
