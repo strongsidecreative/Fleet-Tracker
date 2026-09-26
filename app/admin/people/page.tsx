@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin, deletePermanentlyFromAdmin } from "../users/actions";
+import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin, deletePermanentlyFromAdmin, deleteDriverAndRecordsFromAdmin } from "../users/actions";
 import { driverIdsWithHistory } from "../users/history";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SwipeableRow from "@/components/SwipeableRow";
@@ -220,6 +220,16 @@ export default async function AdminPeoplePage({
                     className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
                   >
                     Delete permanently
+                  </ConfirmSubmitButton>
+                </form>
+              )}
+              {!d.active && driversWithHistory.has(d.id) && (
+                <form action={deleteDriverAndRecordsFromAdmin.bind(null, d.id)} className="flex">
+                  <ConfirmSubmitButton
+                    confirmMessage={`Delete ${d.name} and ALL their records? Every trip, booking, vehicle check, fuel log and incident report they're attached to is deleted too. Can't be undone.`}
+                    className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+                  >
+                    Delete with records
                   </ConfirmSubmitButton>
                 </form>
               )}

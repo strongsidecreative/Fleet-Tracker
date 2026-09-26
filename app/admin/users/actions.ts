@@ -357,6 +357,107 @@ export async function deletePermanentlyFromAdmin(userId: string) {
 }
 
 /**
+ * Deletes an already-deactivated driver AND every record attached to them
+ * (trips, bookings, recurring series, vehicle checks, fuel logs, incident
+ * reports, notifications, audit entries), then the login itself. The
+ * driver-side equivalent of deleteVehicleAndRecords, for the case
+ * deletePermanentlyFromAdmin refuses: an inactive driver whose history
+ * blocks a plain delete (typically a test account).
+ *
+ * Admin-only, same-org only, inactive-only, and refuses while the driver
+ * has an active trip. References to this driver on OTHER people's rows
+ * (booking approver/creator, licence updated_by, incident created_by, a
+ * booking linked to one of their trips) are cleared to null rather than
+ * deleting those rows. Stops at the first failed step.
+ */
+export async function deleteDriverAndRecordsFromAdmin(userId: string) {
+  const fail = (msg: string) => redirect(`/admin/people?role=driver&error=${encodeURIComponent(msg)}`);
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role, organisation_id")
+    .eq("id", user!.id)
+    .single();
+  if (callerProfile?.role !== "admin") fail("You're not authorised to do that.");
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    fail("The service role key isn't set up yet, so this driver can't be deleted. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again.");
+  }
+
+  const adminClient = createAdminClient();
+
+  const { data: targetProfile } = await adminClient
+    .from("profiles")
+    .select("role, active, organisation_id")
+    .eq("id", userId)
+    .single();
+  if (!targetProfile || targetProfile.role !== "driver" || targetProfile.organisation_id !== callerProfile!.organisation_id) {
+    fail("You're not authorised to do that.");
+  }
+  if (targetProfile!.active) fail("Deactivate this driver before deleting them.");
+
+  const { data: activeTrip } = await adminClient
+    .from("vehicle_usage")
+    .select("id")
+    .eq("driver_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (activeTrip) fail("This driver has a vehicle checked out right now. It needs to be checked back in first.");
+
+  const { data: trips } = await adminClient.from("vehicle_usage").select("id").eq("driver_id", userId);
+  const tripIds = (trips ?? []).map((t: { id: string }) => t.id);
+  const { data: checks } = await adminClient.from("vehicle_checks").select("id").eq("driver_id", userId);
+  const checkIds = (checks ?? []).map((c: { id: string }) => c.id);
+  let checkItemIds: string[] = [];
+  if (checkIds.length > 0) {
+    const { data: items } = await adminClient.from("vehicle_check_items").select("id").in("check_id", checkIds);
+    checkItemIds = (items ?? []).map((i: { id: string }) => i.id);
+  }
+
+  type Step = { label: string; run: () => PromiseLike<{ error: { message: string } | null }> };
+  const steps: Step[] = [
+    // Detach references on rows that aren't this driver's own.
+    { label: "booking approver links", run: () => adminClient.from("bookings").update({ approving_admin_id: null }).eq("approving_admin_id", userId) },
+    { label: "booking decision links", run: () => adminClient.from("bookings").update({ decided_by: null }).eq("decided_by", userId) },
+    { label: "booking creator links", run: () => adminClient.from("bookings").update({ created_by: null }).eq("created_by", userId) },
+    { label: "licence update links", run: () => adminClient.from("driver_licences").update({ updated_by: null }).eq("updated_by", userId) },
+    { label: "incident creator links", run: () => adminClient.from("incident_reports").update({ created_by: null }).eq("created_by", userId) },
+    ...(checkItemIds.length > 0
+      ? [{ label: "incident links to vehicle checks", run: () => adminClient.from("incident_reports").update({ source_vehicle_check_item_id: null }).in("source_vehicle_check_item_id", checkItemIds) }]
+      : []),
+    ...(tripIds.length > 0
+      ? [{ label: "booking links to trips", run: () => adminClient.from("bookings").update({ linked_trip_id: null }).in("linked_trip_id", tripIds) }]
+      : []),
+    // Then the driver's own records, children before parents.
+    { label: "incident reports", run: () => adminClient.from("incident_reports").delete().eq("driver_id", userId) },
+    { label: "fuel logs", run: () => adminClient.from("fuel_logs").delete().eq("driver_id", userId) },
+    { label: "vehicle checks", run: () => adminClient.from("vehicle_checks").delete().eq("driver_id", userId) },
+    { label: "bookings", run: () => adminClient.from("bookings").delete().eq("driver_id", userId) },
+    { label: "recurring booking series", run: () => adminClient.from("booking_series").delete().eq("driver_id", userId) },
+    { label: "trip history", run: () => adminClient.from("vehicle_usage").delete().eq("driver_id", userId) },
+    { label: "notifications", run: () => adminClient.from("notifications").delete().eq("recipient_id", userId) },
+    { label: "audit entries", run: () => adminClient.from("audit_log").delete().eq("user_id", userId) },
+  ];
+
+  for (const step of steps) {
+    const { error } = await step.run();
+    if (error) fail(`Something went wrong deleting this driver's ${step.label} (nothing further was deleted): ${error.message}`);
+  }
+
+  const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
+  if (deleteError) fail("Every record for this driver was deleted, but removing the login itself failed. Please try again.");
+
+  revalidatePath("/admin/people");
+  redirect(`/admin/people?role=driver&success=${encodeURIComponent("Driver and all their records deleted.")}`);
+}
+
+/**
  * Wraps deactivateDriverAndFreeEmail for a driver's own Account page —
  * self-service, always targets the caller's own id. Signs them out
  * immediately afterwards: the ban and password reset block future
