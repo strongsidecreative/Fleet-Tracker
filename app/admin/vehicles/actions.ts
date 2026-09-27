@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -126,12 +127,15 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
 export async function archiveVehicle(vehicleId: string): Promise<{ error: string | null }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data: archived, error } = await supabase
     .from("vehicles")
     .update({ active: false, updated_at: new Date().toISOString() })
-    .eq("id", vehicleId);
+    .eq("id", vehicleId)
+    .select("id");
 
-  if (error) {
+  // RLS makes a blocked update return no error and zero rows, so check
+  // a row really changed rather than reporting success on a no-op.
+  if (error || !archived || archived.length === 0) {
     return { error: "Something went wrong removing this vehicle from the fleet. Please try again." };
   }
 
@@ -172,7 +176,35 @@ export async function archiveVehicleFromAdmin(vehicleId: string) {
 export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ error: string | null }> {
   const supabase = createClient();
 
-  const { data: activeTrip } = await supabase
+  // There are deliberately no DELETE RLS policies on vehicles or any of the
+  // history tables (history is permanent by default), so deleting through
+  // the signed-in admin's client silently deleted zero rows and still
+  // reported success. Confirmed live 2026-09-27. Instead: check the caller
+  // is an admin in the same organisation as this vehicle, then do the
+  // deletes with the service role key.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You need to be signed in to do that." };
+
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role, organisation_id")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return { error: "You're not authorised to do that." };
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { error: "The service role key isn't set up yet, so vehicles can't be deleted. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again." };
+  }
+  const admin = createAdminClient();
+
+  const { data: vehicle } = await admin.from("vehicles").select("id, organisation_id").eq("id", vehicleId).maybeSingle();
+  if (!vehicle || vehicle.organisation_id !== callerProfile.organisation_id) {
+    return { error: "You're not authorised to do that." };
+  }
+
+  const { data: activeTrip } = await admin
     .from("vehicle_usage")
     .select("id")
     .eq("vehicle_id", vehicleId)
@@ -183,13 +215,33 @@ export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ erro
     return { error: "This vehicle has an active trip right now — it needs to be checked back in before it can be deleted." };
   }
 
-  const deleteSteps: Array<{ label: string; run: () => Promise<{ error: { message: string } | null }> }> = [
-    { label: "incident reports", run: async () => await supabase.from("incident_reports").delete().eq("vehicle_id", vehicleId) },
-    { label: "vehicle checks", run: async () => await supabase.from("vehicle_checks").delete().eq("vehicle_id", vehicleId) },
-    { label: "fuel logs", run: async () => await supabase.from("fuel_logs").delete().eq("vehicle_id", vehicleId) },
-    { label: "bookings", run: async () => await supabase.from("bookings").delete().eq("vehicle_id", vehicleId) },
-    { label: "recurring booking series", run: async () => await supabase.from("booking_series").delete().eq("vehicle_id", vehicleId) },
-    { label: "trip history", run: async () => await supabase.from("vehicle_usage").delete().eq("vehicle_id", vehicleId) },
+  // Rows elsewhere that point at this vehicle's trips or check items
+  // (another vehicle's booking linked to one of these trips, an incident
+  // raised from one of these check items) get unlinked, not deleted.
+  const { data: trips } = await admin.from("vehicle_usage").select("id").eq("vehicle_id", vehicleId);
+  const tripIds = (trips ?? []).map((t: { id: string }) => t.id);
+  const { data: checks } = await admin.from("vehicle_checks").select("id").eq("vehicle_id", vehicleId);
+  const checkIds = (checks ?? []).map((c: { id: string }) => c.id);
+  let checkItemIds: string[] = [];
+  if (checkIds.length > 0) {
+    const { data: items } = await admin.from("vehicle_check_items").select("id").in("check_id", checkIds);
+    checkItemIds = (items ?? []).map((i: { id: string }) => i.id);
+  }
+
+  type Step = { label: string; run: () => PromiseLike<{ error: { message: string } | null }> };
+  const deleteSteps: Step[] = [
+    ...(checkItemIds.length > 0
+      ? [{ label: "incident links to checks", run: () => admin.from("incident_reports").update({ source_vehicle_check_item_id: null }).in("source_vehicle_check_item_id", checkItemIds) }]
+      : []),
+    ...(tripIds.length > 0
+      ? [{ label: "booking links to trips", run: () => admin.from("bookings").update({ linked_trip_id: null }).in("linked_trip_id", tripIds) }]
+      : []),
+    { label: "incident reports", run: () => admin.from("incident_reports").delete().eq("vehicle_id", vehicleId) },
+    { label: "vehicle checks", run: () => admin.from("vehicle_checks").delete().eq("vehicle_id", vehicleId) },
+    { label: "fuel logs", run: () => admin.from("fuel_logs").delete().eq("vehicle_id", vehicleId) },
+    { label: "bookings", run: () => admin.from("bookings").delete().eq("vehicle_id", vehicleId) },
+    { label: "recurring booking series", run: () => admin.from("booking_series").delete().eq("vehicle_id", vehicleId) },
+    { label: "trip history", run: () => admin.from("vehicle_usage").delete().eq("vehicle_id", vehicleId) },
   ];
 
   for (const step of deleteSteps) {
@@ -201,14 +253,15 @@ export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ erro
     }
   }
 
-  const { error } = await supabase.from("vehicles").delete().eq("id", vehicleId);
-  if (error) {
+  const { data: deleted, error } = await admin.from("vehicles").delete().eq("id", vehicleId).select("id");
+  if (error || !deleted || deleted.length === 0) {
     return {
-      error: "Every record for this vehicle was deleted, but removing the vehicle itself failed. Please try again.",
+      error: `Every record for this vehicle was deleted, but removing the vehicle itself failed${error ? `: ${error.message}` : ""}. Please try again.`,
     };
   }
 
   revalidatePath("/admin/vehicles");
+  revalidatePath("/admin");
   return { error: null };
 }
 

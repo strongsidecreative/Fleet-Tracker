@@ -28,11 +28,13 @@ export default async function AdminPeoplePage({
   // call for the whole org rather than per-row, since this page can list
   // dozens of people. If the service role key isn't set up, this silently
   // falls back to showing no one as pending rather than breaking the page.
-  let pendingIds = new Set<string>();
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { data: userList } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
-    pendingIds = new Set((userList?.users ?? []).filter((u) => !u.last_sign_in_at).map((u) => u.id));
-  }
+  // Started now but not awaited yet, so it runs in parallel with the
+  // page's other queries below instead of before them.
+  const pendingIdsPromise: Promise<Set<string>> = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+        .auth.admin.listUsers({ perPage: 1000 })
+        .then(({ data: userList }) => new Set((userList?.users ?? []).filter((u) => !u.last_sign_in_at).map((u) => u.id)))
+    : Promise.resolve(new Set<string>());
 
   const TabLink = ({ value, label }: { value: string; label: string }) => (
     <Link
@@ -46,7 +48,10 @@ export default async function AdminPeoplePage({
   );
 
   if (role === "admin") {
-    const { data: admins } = await supabase.from("profiles").select("*").eq("role", "admin").order("name");
+    const [{ data: admins }, pendingIds] = await Promise.all([
+      supabase.from("profiles").select("*").eq("role", "admin").order("name"),
+      pendingIdsPromise,
+    ]);
 
     return (
       <div>
@@ -57,9 +62,9 @@ export default async function AdminPeoplePage({
             <TabLink value="driver" label="Drivers" />
             <TabLink value="admin" label="Admins" />
           </div>
-          <a href="/admin/admins/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
+          <Link href="/admin/admins/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
             Add Admin
-          </a>
+          </Link>
         </div>
         <div className="space-y-2">
           {admins?.map((a) => (
@@ -110,7 +115,7 @@ export default async function AdminPeoplePage({
   }
 
   // These four don't depend on each other, so fetch them together.
-  const [{ data: drivers }, { data: allTrips }, { data: activeTrips }, { data: licences }] = await Promise.all([
+  const [{ data: drivers }, { data: allTrips }, { data: activeTrips }, { data: licences }, pendingIds] = await Promise.all([
     supabase.from("profiles").select("*").eq("role", "driver").order("name"),
     // Only the columns the KM totals below actually use — this table grows
     // without bound over time, and previously pulled every column plus a
@@ -118,6 +123,7 @@ export default async function AdminPeoplePage({
     supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").eq("status", "completed"),
     supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "active"),
     supabase.from("driver_licences").select("*"),
+    pendingIdsPromise,
   ]);
 
   // Which inactive drivers can be permanently deleted (zero trip/booking/
@@ -149,9 +155,9 @@ export default async function AdminPeoplePage({
           <a href="/admin/drivers/export" className="rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink">
             Export CSV
           </a>
-          <a href="/admin/drivers/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
+          <Link href="/admin/drivers/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
             Add Driver
-          </a>
+          </Link>
         </div>
       </div>
       {(() => {
