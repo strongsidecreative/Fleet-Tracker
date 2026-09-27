@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { EmailOtpType } from "@supabase/supabase-js";
@@ -15,6 +15,12 @@ export default function ResetPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  // Set when the URL carries a new-style ?token_hash=... link. The token is
+  // NOT exchanged on page load any more, only when the person taps the
+  // Continue button (see acceptLink below).
+  const [pendingLink, setPendingLink] = useState<{ tokenHash: string; type: EmailOtpType } | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const verifyStarted = useRef(false);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -50,13 +56,16 @@ export default function ResetPasswordForm() {
     const tokenHash = searchParams.get("token_hash");
     const type = searchParams.get("type") as EmailOtpType | null;
     if (tokenHash && type) {
-      supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(({ error: verifyError }) => {
-        if (verifyError) {
-          setLinkDead(verifyError.message || "This link has expired or has already been used.");
-          return;
-        }
-        setReady(true);
-      });
+      // Don't exchange the token on page load. Confirmed live 2026-09-27
+      // in the Supabase auth logs: opening an invite on an iPhone produced
+      // TWO /verify calls from this page one second apart. The first
+      // succeeded, the second hit "One-time token not found" (otp_expired)
+      // and this page showed that error, even though the person was
+      // actually signed in. Link previews / page preloading (iOS Mail,
+      // Safari, Outlook Safe Links detonation) run this page's JS too, so
+      // any auto-exchange on load can be burned or doubled. Waiting for a
+      // real tap means only a person ever uses the token, exactly once.
+      setPendingLink({ tokenHash, type });
       return;
     }
 
@@ -88,6 +97,43 @@ export default function ResetPasswordForm() {
       clearTimeout(timeout);
     };
   }, [supabase]);
+
+  async function acceptLink() {
+    if (!pendingLink || verifyStarted.current) return;
+    verifyStarted.current = true;
+    setVerifying(true);
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: pendingLink.tokenHash,
+      type: pendingLink.type,
+    });
+
+    // Take the one-time token out of the address bar either way, so a
+    // refresh or back-navigation can't try to spend it again.
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if (verifyError) {
+      // If the token was already spent but this browser holds a valid
+      // session (e.g. it was exchanged a moment ago in this same browser),
+      // the link did its job: carry on to the password form.
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setPendingLink(null);
+        setVerifying(false);
+        setReady(true);
+        return;
+      }
+      setVerifying(false);
+      setLinkDead(
+        "This link has already been used or has expired. Ask your fleet admin to resend your invite, or use Forgot password on the login page."
+      );
+      return;
+    }
+
+    setPendingLink(null);
+    setVerifying(false);
+    setReady(true);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -145,6 +191,30 @@ export default function ResetPasswordForm() {
           <a href="/login" className="mt-4 inline-block text-sm font-semibold text-brand underline">
             Go to login to request a new one
           </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (pendingLink) {
+    const isInvite = pendingLink.type === "invite";
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="mb-2 font-display text-2xl font-semibold text-ink">
+            {isInvite ? "Welcome to Fleet Tracker" : "Reset your password"}
+          </h1>
+          <p className="mb-6 text-sm text-steel">
+            {isInvite ? "Tap below to accept your invite and set your password." : "Tap below to continue and choose a new password."}
+          </p>
+          <button
+            type="button"
+            onClick={acceptLink}
+            disabled={verifying}
+            className="w-full rounded-lg bg-ink py-3 text-base font-semibold text-paper disabled:opacity-60"
+          >
+            {verifying ? "Checking…" : isInvite ? "Accept invite" : "Continue"}
+          </button>
         </div>
       </div>
     );
