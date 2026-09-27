@@ -5,7 +5,7 @@
 // brief moment between a tap and the real content arriving.
 export default function DriverLoading() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-label="Loading">
+    <div className="space-y-5" aria-busy="true" aria-label="Loading" data-page-loading>
       <div className="h-7 w-48 animate-pulse rounded bg-steel/20" />
       <div className="h-28 animate-pulse rounded-2xl border border-steel/20 bg-white" />
       <div className="grid grid-cols-2 gap-3">

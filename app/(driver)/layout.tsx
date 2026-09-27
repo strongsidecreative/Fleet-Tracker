@@ -1,5 +1,6 @@
 import DriverNav from "@/components/DriverNav";
 import TourLauncher from "@/components/tour/TourLauncher";
+import PullToRefresh from "@/components/PullToRefresh";
 import { driverTourSteps } from "@/components/tour/tourSteps";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -22,6 +23,7 @@ export default async function DriverLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-screen">
+      <PullToRefresh />
       {/* The full driver welcome tour (its "Home"/"Start a trip" steps
           target path "/", which now redirects admins straight to
           /admin unless "?as=driver" is present) doesn't make sense for an

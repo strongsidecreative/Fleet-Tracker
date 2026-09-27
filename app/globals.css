@@ -14,12 +14,16 @@
 
 html {
   @apply bg-paper;
+  overscroll-behavior-y: contain;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   @apply bg-paper text-ink font-body;
+  /* The app has its own pull-to-refresh (components/PullToRefresh.tsx).
+     Stop Android Chrome's built-in one firing on top of it. */
+  overscroll-behavior-y: contain;
 }
 
 /* Odometer-style number treatment — the app's signature element.

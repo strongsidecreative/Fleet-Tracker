@@ -7,7 +7,7 @@
 // chrome: no data, no logic, safe to add anywhere.
 export default function AdminLoading() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-label="Loading">
+    <div className="space-y-5" aria-busy="true" aria-label="Loading" data-page-loading>
       <div className="h-6 w-40 animate-pulse rounded bg-steel/20" />
       <div className="grid grid-cols-2 gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
