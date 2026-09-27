@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const justSetUp = searchParams.get("setup") === "success";
+  const serverError = searchParams.get("error") === "server";
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
@@ -52,6 +53,12 @@ export default function LoginForm() {
             className="mx-auto h-24 w-24 rounded-2xl"
           />
         </div>
+
+        {serverError && (
+          <p className="mb-4 rounded-lg border border-rust/40 bg-rust/10 px-4 py-3 text-sm font-medium text-rust">
+            You signed in, but the app couldn&apos;t load your account details just now. Please try again in a moment. If it keeps happening, let your fleet admin know.
+          </p>
+        )}
 
         {justSetUp && (
           <p className="mb-4 rounded-lg border border-track/40 bg-track/10 px-4 py-3 text-sm font-medium text-track">

@@ -99,13 +99,24 @@ export async function middleware(request: NextRequest) {
   // — whether it's a page load or a Server Action posted to the same
   // route.
   if (user && (isAdminRoute || requiredFeature || isRootAdminRedirectCandidate)) {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, active, organisation:organisations(features)")
       .eq("id", user.id)
       .single();
 
     if (isAdminRoute) {
+      // A failed lookup (database error) is not the same as "this account
+      // is deactivated". Previously both signed the person out and dumped
+      // them on an empty login form, which is what made a database-side
+      // bug (see migration 0020) look like "can't log in". Now: only a
+      // profile that really exists and is inactive gets signed out; an
+      // error keeps the session and says what happened.
+      if (profileError && profileError.code !== "PGRST116") {
+        const url = new URL("/login", request.url);
+        url.searchParams.set("error", "server");
+        return NextResponse.redirect(url);
+      }
       if (!profile?.active) {
         await supabase.auth.signOut();
         return NextResponse.redirect(new URL("/login", request.url));
