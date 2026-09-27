@@ -3,6 +3,7 @@ import Link from "next/link";
 import SuccessBanner from "@/components/SuccessBanner";
 import { adminCancelBooking } from "./actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 function fmtRange(start: string, end: string) {
   const s = new Date(start);
@@ -12,9 +13,7 @@ function fmtRange(start: string, end: string) {
 
 export default async function AdminBookingsPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: allPending } = await supabase
     .from("bookings")

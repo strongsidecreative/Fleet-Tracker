@@ -1,11 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { markNotificationRead, markAllNotificationsRead } from "./actions";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function AdminNotificationsPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: notifications } = await supabase
     .from("notifications")

@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/nz-time";
 import BackButton from "@/components/BackButton";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function MyFuelPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: logs } = await supabase
     .from("fuel_logs")

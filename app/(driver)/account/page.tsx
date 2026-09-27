@@ -9,12 +9,11 @@ import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import ErrorBanner from "@/components/ErrorBanner";
 import Link from "next/link";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function AccountPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const [{ data: profile }, { data: licence }, features] = await Promise.all([
     supabase.from("profiles").select("name, email, role").eq("id", user!.id).single(),

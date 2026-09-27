@@ -2,24 +2,20 @@ import DriverNav from "@/components/DriverNav";
 import TourLauncher from "@/components/tour/TourLauncher";
 import PullToRefresh from "@/components/PullToRefresh";
 import { driverTourSteps } from "@/components/tour/tourSteps";
-import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { getCurrentUser, getMyProfile } from "@/lib/supabase/current";
 
 export default async function DriverLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   // Admins land here too — scanning a vehicle and tracking trips uses the
   // same pages as drivers (no separate admin-only version of this flow).
   // Show a way back to the admin dashboard so it doesn't feel like a dead
   // end once they're on these driver-facing pages.
-  let isAdmin = false;
-  if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    isAdmin = profile?.role === "admin";
-  }
+  // Shared with the page (and getViewerFeatures) via React cache — one
+  // profiles query per request instead of one per component.
+  const profile = user ? await getMyProfile() : null;
+  const isAdmin = profile?.role === "admin";
 
   return (
     <div className="min-h-screen">

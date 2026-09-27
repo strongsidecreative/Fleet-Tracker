@@ -5,6 +5,7 @@ import RemoveVehicleSection from "./RemoveVehicleSection";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import BackButton from "@/components/BackButton";
 import ErrorBanner from "@/components/ErrorBanner";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function VehicleDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -14,7 +15,7 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
     },
     { data: vehicle },
   ] = await Promise.all([
-    supabase.auth.getUser(),
+    getCurrentUser().then((user) => ({ data: { user } })),
     supabase.from("vehicles").select("*").eq("id", params.id).single(),
   ]);
 

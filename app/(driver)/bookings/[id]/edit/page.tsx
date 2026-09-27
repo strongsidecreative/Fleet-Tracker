@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import EditBookingForm from "./EditBookingForm";
 import BackButton from "@/components/BackButton";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function EditBookingPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const [{ data: booking }, { data: vehicles }] = await Promise.all([
     supabase.from("bookings").select("*").eq("id", params.id).single(),

@@ -5,6 +5,7 @@ import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import AddFuelPanel from "./fuel/AddFuelPanel";
+import { getCurrentUser, getMyProfile } from "@/lib/supabase/current";
 
 export default async function DriverDashboard({
   searchParams,
@@ -12,24 +13,13 @@ export default async function DriverDashboard({
   searchParams: { featureDisabled?: string; as?: string };
 }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
-  const { data: profile } = await supabase.from("profiles").select("name, role").eq("id", user!.id).single();
-
-  // middleware.ts now redirects an admin hitting "/" (the PWA's install
-  // start_url) straight to /admin before any HTML renders — that's what
-  // stops the driver header/tabs from flashing on an admin's app-open.
-  // This check stays here too, purely as a fallback for any edge case
-  // that reaches this page anyway (e.g. profile role changing between
-  // middleware's query and this one). Same "?as=driver" escape hatch as
-  // middleware, for AdminNav's "Switch to Driver" button.
-  if (profile?.role === "admin" && searchParams.as !== "driver") {
-    redirect("/admin");
-  }
-
-  const [{ data: activeTrip }, { data: completedTrips }, features] = await Promise.all([
+  // Everything in one parallel batch (previously profile first, then the
+  // rest): the profile is shared with the layout via React cache, and the
+  // admin redirect below only needs it after the fact.
+  const [profile, { data: activeTrip }, { data: completedTrips }, features] = await Promise.all([
+    getMyProfile(),
     supabase
       .from("vehicle_usage")
       .select("*, vehicle:vehicles(name, photo_url)")
@@ -47,6 +37,13 @@ export default async function DriverDashboard({
     // what actually blocks the pages if someone still has an old link.
     getViewerFeatures(supabase, user!.id),
   ]);
+
+  // middleware.ts redirects an admin hitting "/" (the PWA's install
+  // start_url) straight to /admin before any HTML renders. This stays as
+  // a fallback, with the same "?as=driver" escape hatch as middleware.
+  if (profile?.role === "admin" && searchParams.as !== "driver") {
+    redirect("/admin");
+  }
 
   const trips = completedTrips ?? [];
   const now = new Date();

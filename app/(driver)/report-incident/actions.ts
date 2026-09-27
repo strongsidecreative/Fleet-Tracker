@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 type ActionState = { error: string | null };
 
@@ -56,5 +57,8 @@ export async function submitIncident(prevState: ActionState, formData: FormData)
     return { error: "Something went wrong submitting this report. Please try again." };
   }
 
+  // Clears every cached screen (next.config.js staleTimes) so no tab
+  // shows the old trip/check state for the next 30s.
+  revalidatePath("/", "layout");
   redirect("/?success=Report submitted");
 }

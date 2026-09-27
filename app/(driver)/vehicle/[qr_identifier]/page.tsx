@@ -4,6 +4,7 @@ import OverrideBookingForm from "./OverrideBookingForm";
 import Link from "next/link";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
   const supabase = createClient();
@@ -16,7 +17,7 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
     },
     { data: vehicle },
   ] = await Promise.all([
-    supabase.auth.getUser(),
+    getCurrentUser().then((user) => ({ data: { user } })),
     supabase.from("vehicles").select("*").eq("qr_identifier", params.qr_identifier).single(),
   ]);
 

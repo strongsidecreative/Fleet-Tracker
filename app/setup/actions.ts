@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 type ActionState = { error: string | null };
 
@@ -97,5 +98,8 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
   // in) rather than the bare login page — the new admin hasn't installed
   // the app or seen what it does yet, so dropping them at a login form
   // with nothing else is a dead end.
+  // Clears every cached screen (next.config.js staleTimes) so no tab
+  // shows the old trip/check state for the next 30s.
+  revalidatePath("/", "layout");
   redirect("/guide/admin?setup=success");
 }

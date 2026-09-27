@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { CHECKLIST_ITEMS } from "@/lib/vehicleCheckItems";
 
 type ActionState = { error: string | null };
@@ -92,5 +93,8 @@ export async function submitVehicleCheck(prevState: ActionState, formData: FormD
     });
   }
 
+  // Clears every cached screen (next.config.js staleTimes) so no tab
+  // shows the old trip/check state for the next 30s.
+  revalidatePath("/", "layout");
   redirect(`/vehicle-check/${check.id}?success=Vehicle check submitted`);
 }

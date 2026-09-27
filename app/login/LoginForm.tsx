@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const justSetUp = searchParams.get("setup") === "success";
   const supabase = createClient();
@@ -34,8 +33,11 @@ export default function LoginForm() {
       .eq("id", data.user.id)
       .single();
 
-    router.push(profile?.role === "admin" ? "/admin" : "/");
-    router.refresh();
+    // One navigation, not two: router.push() followed by router.refresh()
+    // rendered the destination on the server twice back to back, which is
+    // a big part of why admin sign-in felt slow. A single hard navigation
+    // also guarantees the new session cookies are what the server sees.
+    window.location.replace(profile?.role === "admin" ? "/admin" : "/");
   }
 
   return (

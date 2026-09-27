@@ -6,6 +6,7 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: { headers: request.headers },
   });
+  const pendingCookies: Array<{ name: string; value: string } & CookieOptions> = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,11 +16,24 @@ export async function middleware(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value;
         },
+        // Standard @supabase/ssr pattern: when getUser() below refreshes
+        // an expired session, write the new cookies onto the request as
+        // well as the response, so the layout/page rendering this same
+        // request see the fresh session instead of refreshing it again.
+        // Every cookie set so far is re-applied each time the response is
+        // rebuilt, so a session split across several cookie chunks is
+        // never partly dropped.
         set(name: string, value: string, options: CookieOptions) {
-          response.cookies.set({ name, value, ...options });
+          request.cookies.set({ name, value, ...options });
+          pendingCookies.push({ name, value, ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          pendingCookies.forEach((c) => response.cookies.set(c));
         },
         remove(name: string, options: CookieOptions) {
-          response.cookies.set({ name, value: "", ...options });
+          request.cookies.set({ name, value: "", ...options });
+          pendingCookies.push({ name, value: "", ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          pendingCookies.forEach((c) => response.cookies.set(c));
         },
       },
     }

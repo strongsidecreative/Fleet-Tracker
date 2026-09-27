@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function VehicleCheckHistoryPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: checks } = await supabase
     .from("vehicle_checks")

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import BackButton from "@/components/BackButton";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function ReportViewPage({
   searchParams,
@@ -15,9 +16,7 @@ export default async function ReportViewPage({
     return <p className="text-sm text-steel">Missing report period.</p>;
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   const features = await getViewerFeatures(supabase, user!.id);
 
   const [{ data: trips }, { data: fuelLogs }] = await Promise.all([

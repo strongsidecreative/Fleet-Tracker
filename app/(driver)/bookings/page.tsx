@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cancelBooking } from "./actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SuccessBanner from "@/components/SuccessBanner";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 function fmtRange(start: string, end: string) {
   const s = new Date(start);
@@ -78,9 +79,7 @@ function BookingCard({ b, vehicleName, showCancel }: { b: any; vehicleName: stri
 
 export default async function DriverBookingsPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: bookings } = await supabase
     .from("bookings")

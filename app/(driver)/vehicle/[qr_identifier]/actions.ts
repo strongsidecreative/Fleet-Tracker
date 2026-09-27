@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 
@@ -74,6 +75,9 @@ export async function startTrip(
     return { error: "Something went wrong starting this trip. Please try again." };
   }
 
+  // Clears every cached screen (next.config.js staleTimes) so no tab
+  // shows the old trip/check state for the next 30s.
+  revalidatePath("/", "layout");
   redirect("/?success=Vehicle use started");
 }
 
@@ -116,5 +120,8 @@ export async function finishTrip(
     return { error: "Something went wrong finishing this trip. Please try again." };
   }
 
+  // Clears every cached screen (next.config.js staleTimes) so no tab
+  // shows the old trip/check state for the next 30s.
+  revalidatePath("/", "layout");
   redirect("/?success=Trip finished");
 }

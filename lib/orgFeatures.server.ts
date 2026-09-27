@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normaliseFeatures, type FeatureKey } from "./orgFeatures";
+import { getMyProfile } from "./supabase/current";
 
 /**
  * Reads the current viewer's organisation feature flags, for use in
@@ -13,6 +14,19 @@ export async function getViewerFeatures(
   supabase: SupabaseClient,
   userId: string
 ): Promise<Record<FeatureKey, boolean>> {
+  // Normal case: it's the viewer's own flags, so reuse the profile row
+  // this request has already fetched (or will) instead of querying again.
+  try {
+    const mine = await getMyProfile();
+    if (mine && mine.id === userId) {
+      const rawMine = mine.organisation as unknown;
+      const orgMine = Array.isArray(rawMine) ? rawMine[0] : rawMine;
+      return normaliseFeatures((orgMine as { features?: unknown } | null | undefined)?.features);
+    }
+  } catch {
+    // Outside a request scope (shouldn't happen) — fall through to a direct query.
+  }
+
   const { data } = await supabase
     .from("profiles")
     .select("organisation:organisations(features)")

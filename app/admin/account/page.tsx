@@ -6,12 +6,11 @@ import { adminTourSteps } from "@/components/tour/tourSteps";
 import OrganisationCard from "./OrganisationCard";
 import FeatureTogglesCard from "./FeatureTogglesCard";
 import { normaliseFeatures } from "@/lib/orgFeatures";
+import { getCurrentUser } from "@/lib/supabase/current";
 
 export default async function AdminAccountPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: profile } = await supabase
     .from("profiles")
