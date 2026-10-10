@@ -9,7 +9,7 @@ export default async function BookingApprovalPage({ params }: { params: { id: st
   const [{ data: booking }, { data: vehicles }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
+      .select("*, vehicle:vehicles(name, registration), driver:profiles!bookings_driver_id_fkey(name)")
       .eq("id", params.id)
       .single(),
     supabase.from("vehicles").select("id, name").eq("active", true).order("name"),

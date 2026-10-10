@@ -4,6 +4,16 @@ import { markNotificationRead, markAllNotificationsRead, clearNotification, clea
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { getCurrentUser } from "@/lib/supabase/current";
 
+const OPEN_LABELS: Record<string, string> = {
+  booking_created: "View booking",
+  booking_override: "View booking",
+  incident_report: "View incident",
+  vehicle_check_issue: "View check",
+  maintenance_due: "View vehicle",
+  licence_expiring: "View driver",
+  receipt_export_due: "Get receipts",
+};
+
 export default async function AdminNotificationsPage() {
   const supabase = createClient();
   const user = await getCurrentUser();
@@ -49,14 +59,12 @@ export default async function AdminNotificationsPage() {
           return (
             <div key={n.id} className={rowClass}>
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-ink">
+                <Link href={`/notifications/open/${n.id}`} prefetch={false} className="group flex-1 text-sm font-medium text-ink">
                   {n.message}
-                  {n.type === "receipt_export_due" && (
-                    <Link href="/admin/fuel/receipts" className="ml-1 text-brand underline">
-                      Get receipts
-                    </Link>
-                  )}
-                </p>
+                  <span className="ml-1 whitespace-nowrap text-brand underline group-hover:no-underline">
+                    {OPEN_LABELS[n.type] ?? "View"} →
+                  </span>
+                </Link>
                 <div className="flex flex-shrink-0 items-center gap-3">
                   {!n.read && (
                     <form action={markNotificationRead.bind(null, n.id)}>

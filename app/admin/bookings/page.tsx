@@ -17,7 +17,7 @@ export default async function AdminBookingsPage() {
 
   const { data: allPending } = await supabase
     .from("bookings")
-    .select("*, vehicle:vehicles(name), driver:profiles(name)")
+    .select("*, vehicle:vehicles(name), driver:profiles!bookings_driver_id_fkey(name)")
     .eq("approval_status", "pending")
     .order("start_datetime", { ascending: true });
 
@@ -36,7 +36,7 @@ export default async function AdminBookingsPage() {
   const nowIso = new Date().toISOString();
   const { data: confirmed } = await supabase
     .from("bookings")
-    .select("*, vehicle:vehicles(name), driver:profiles(name)")
+    .select("*, vehicle:vehicles(name), driver:profiles!bookings_driver_id_fkey(name)")
     .eq("approval_status", "approved")
     .in("booking_status", ["upcoming", "active"])
     .gte("end_datetime", nowIso)

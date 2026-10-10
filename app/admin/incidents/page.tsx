@@ -21,7 +21,7 @@ export default async function AdminIncidentsPage() {
   const supabase = createClient();
   const { data: reports } = await supabase
     .from("incident_reports")
-    .select("*, vehicle:vehicles(name), driver:profiles(name)")
+    .select("*, vehicle:vehicles(name), driver:profiles!incident_reports_driver_id_fkey(name)")
     .order("created_at", { ascending: false });
 
   return (
@@ -32,7 +32,7 @@ export default async function AdminIncidentsPage() {
         {reports?.map((i) => {
           const incidentWhen = formatIncidentDateTime(i.incident_date, i.incident_time);
           return (
-            <div key={i.id} className="rounded-xl border border-steel/20 bg-white p-3">
+            <div key={i.id} id={`incident-${i.id}`} className="scroll-mt-20 rounded-xl border border-steel/20 bg-white p-3 target:border-brand target:ring-2 target:ring-brand/40">
               <div className="flex items-center justify-between">
                 <p className="font-medium text-ink">{i.vehicle?.name}</p>
                 {i.report_type === "general_check" ? (

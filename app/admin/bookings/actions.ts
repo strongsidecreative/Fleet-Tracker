@@ -15,7 +15,7 @@ async function findConflicts(supabase: any, rows: any[]) {
 
     const { data: overlapping } = await supabase
       .from("bookings")
-      .select("*, driver:profiles(name), vehicle:vehicles(name)")
+      .select("*, driver:profiles!bookings_driver_id_fkey(name), vehicle:vehicles(name)")
       .eq("vehicle_id", row.vehicle_id)
       .eq("approval_status", "approved")
       .in("booking_status", ["upcoming", "active"])

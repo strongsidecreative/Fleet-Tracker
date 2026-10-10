@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-function urlBase64ToUint8Array(base64String: string) {
+function urlBase64ToUint8Array(raw: string) {
+  // Trim stray spaces/quotes/newlines that can sneak in when the key is
+  // pasted into hosting settings; atob() throws on them.
+  const base64String = raw.trim().replace(/^["']|["']$/g, "");
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
@@ -29,9 +32,32 @@ function sameKey(sub: PushSubscription, key: Uint8Array): boolean {
   return a.length === key.length && a.every((b, i) => b === key[i]);
 }
 
+// Plain-English reason for a failed Turn on, plus the browser's own error
+// name so a screenshot tells us exactly what went wrong.
+function explain(err: unknown): string {
+  const e = err as { name?: string; message?: string };
+  const name = e?.name ?? "Error";
+  const detail = `${name}${e?.message ? `: ${e.message}` : ""}`.slice(0, 160);
+  if (name === "NotAllowedError") {
+    return `Your phone didn't allow notifications for Fleet Tracker. Check Settings > Notifications > Fleet Tracker, then try again. (${detail})`;
+  }
+  if (name === "InvalidCharacterError" || name === "InvalidAccessError") {
+    return `The app's notification key looks wrong. Let your admin know. (${detail})`;
+  }
+  if (name === "AbortError") {
+    return `Your phone couldn't reach Apple's notification service. Check your connection and try again. (${detail})`;
+  }
+  return `Couldn't turn notifications on. Please try again. (${detail})`;
+}
+
 export default function PushSubscribeButton() {
   const [status, setStatus] = useState<Status>("checking");
   const [message, setMessage] = useState<string | null>(null);
+  // The service worker registration, fetched on load so that tapping Turn
+  // on goes straight to the permission prompt and subscribe. iPhone only
+  // allows these in direct response to a tap, and waiting for the service
+  // worker in between can use that up.
+  const regRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -45,6 +71,7 @@ export default function PushSubscribeButton() {
       }
       try {
         const reg = await readyRegistration();
+        regRef.current = reg;
         const existing = await reg.pushManager.getSubscription();
         // "On" only if this device is subscribed AND permission is still granted.
         setStatus(existing && Notification.permission === "granted" ? "on" : "off");
@@ -58,13 +85,18 @@ export default function PushSubscribeButton() {
     setStatus("working");
     setMessage(null);
     try {
-      const permission = await Notification.requestPermission();
+      const rawKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!rawKey) throw Object.assign(new Error("Push key missing from this build"), { name: "ConfigError" });
+      const key = urlBase64ToUint8Array(rawKey);
+      const reg = regRef.current ?? (await readyRegistration());
+
+      const permission =
+        Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
       if (permission !== "granted") {
         setStatus(permission === "denied" ? "denied" : "off");
+        if (permission !== "denied") setMessage("Notifications weren't allowed. Tap Turn on and choose Allow.");
         return;
       }
-      const key = urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
-      const reg = await readyRegistration();
 
       // A subscription made earlier with a different key can't be reused.
       let sub = await reg.pushManager.getSubscription();
@@ -81,15 +113,16 @@ export default function PushSubscribeButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub),
       });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(body?.error ?? `HTTP ${res.status}`), { name: "SaveError" });
+      }
       setStatus("on");
       setMessage("Notifications are on for this device.");
     } catch (err) {
       console.error("Push subscribe failed", err);
       setStatus("off");
-      setMessage(
-        "Couldn't turn notifications on. On iPhone, add Fleet Tracker to your Home Screen and open it from there first, then try again."
-      );
+      setMessage(explain(err));
     }
   }
 

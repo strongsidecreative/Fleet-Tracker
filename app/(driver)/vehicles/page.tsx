@@ -10,7 +10,7 @@ export default async function VehiclesPage() {
     supabase.from("vehicle_usage").select("*, driver:profiles(name)").eq("status", "active"),
     supabase
       .from("bookings")
-      .select("*, driver:profiles(name)")
+      .select("*, driver:profiles!bookings_driver_id_fkey(name)")
       .eq("status", "upcoming")
       .gte("end_datetime", nowIso)
       .order("start_datetime"),

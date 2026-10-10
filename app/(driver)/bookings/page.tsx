@@ -43,7 +43,7 @@ function StatusBadge({ b }: { b: any }) {
 
 function BookingCard({ b, vehicleName, showCancel }: { b: any; vehicleName: string; showCancel: boolean }) {
   return (
-    <div className="rounded-xl border border-steel/20 bg-white p-3">
+    <div id={`booking-${b.id}`} className="scroll-mt-20 rounded-xl border border-steel/20 bg-white p-3 target:border-brand target:ring-2 target:ring-brand/40">
       <div className="flex items-center justify-between">
         <p className="font-medium text-ink">{b.title || "Booking"}</p>
         <StatusBadge b={b} />

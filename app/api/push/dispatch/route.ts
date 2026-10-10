@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToSubscriptions } from "@/lib/push";
+import { notificationHref } from "@/lib/notificationLinks";
 
 // Called by a Postgres trigger (see supabase/migrations/0012_push_notifications.sql)
 // every time a row is inserted into `notifications` — admin actions, driver
@@ -20,21 +21,6 @@ const TITLES: Record<string, string> = {
   receipt_export_due: "Monthly Fuel Receipts",
 };
 
-// Where tapping the push notification should take the recipient.
-const ADMIN_URL = "/admin/notifications";
-const DRIVER_URL = "/bookings";
-const URLS: Record<string, string> = {
-  maintenance_due: ADMIN_URL,
-  incident_report: ADMIN_URL,
-  licence_expiring: ADMIN_URL,
-  vehicle_check_issue: ADMIN_URL,
-  booking_created: ADMIN_URL,
-  booking_approved: DRIVER_URL,
-  booking_declined: DRIVER_URL,
-  booking_override: DRIVER_URL,
-  receipt_export_due: "/admin/fuel/receipts",
-};
-
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-push-secret");
   if (!secret || secret !== process.env.PUSH_DISPATCH_SECRET) {
@@ -50,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const { data: notification } = await supabase
     .from("notifications")
-    .select("id, recipient_id, type, message")
+    .select("id, recipient_id, type, message, related_table, related_id, recipient:profiles!recipient_id(role)")
     .eq("id", notification_id)
     .single();
 
@@ -71,7 +57,7 @@ export async function POST(req: NextRequest) {
   const { deadSubscriptionIds } = await sendPushToSubscriptions(subs, {
     title: TITLES[notification.type],
     body: notification.message,
-    url: URLS[notification.type] ?? "/",
+    url: pushUrl(notification),
   });
 
   if (deadSubscriptionIds.length > 0) {
@@ -79,4 +65,19 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, sent: subs.length - deadSubscriptionIds.length });
+}
+
+// Admins go through /notifications/open/<id>, which marks the notification
+// read and then opens the booking / check / vehicle it is about. Drivers
+// can't read the notifications table (RLS), so they go straight there.
+function pushUrl(n: {
+  id: string;
+  type: string;
+  related_table: string | null;
+  related_id: string | null;
+  recipient: unknown;
+}): string {
+  const r = Array.isArray(n.recipient) ? n.recipient[0] : n.recipient;
+  const role = (r as { role?: string } | null)?.role === "admin" ? "admin" : "driver";
+  return role === "admin" ? `/notifications/open/${n.id}` : notificationHref(n, "driver");
 }

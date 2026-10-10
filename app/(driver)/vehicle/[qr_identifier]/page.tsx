@@ -26,7 +26,7 @@ async function getCurrentReservation(
   // sees the viewer's own bookings, or all of them for an admin).
   const { data: own } = await supabase
     .from("bookings")
-    .select("id, driver_id, end_datetime, driver:profiles(name)")
+    .select("id, driver_id, end_datetime, driver:profiles!bookings_driver_id_fkey(name)")
     .eq("vehicle_id", vehicleId)
     .eq("approval_status", "approved")
     .in("booking_status", ["upcoming", "active"])

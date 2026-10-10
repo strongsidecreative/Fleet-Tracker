@@ -28,7 +28,7 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
     getViewerFeatures(supabase, user!.id),
     supabase
       .from("bookings")
-      .select("*, driver:profiles(name)")
+      .select("*, driver:profiles!bookings_driver_id_fkey(name)")
       .eq("vehicle_id", vehicle.id)
       .eq("approval_status", "approved")
       .in("booking_status", ["upcoming", "active"])
@@ -37,7 +37,7 @@ export default async function VehicleDetailPage({ params }: { params: { id: stri
       .limit(10),
     supabase
       .from("bookings")
-      .select("*, driver:profiles(name)")
+      .select("*, driver:profiles!bookings_driver_id_fkey(name)")
       .eq("vehicle_id", vehicle.id)
       .eq("approval_status", "pending")
       .order("start_datetime", { ascending: true })
