@@ -6,9 +6,9 @@
  * if it's slow or down, the trip still saves with just the coordinates).
  */
 
-export type TripLocation = { lat: number; lng: number; accuracy: number | null; address: string | null };
+export type TripLocation = { lat: number | null; lng: number | null; accuracy: number | null; address: string | null };
 
-export function readLocation(formData: FormData): Omit<TripLocation, "address"> | null {
+export function readLocation(formData: FormData): { lat: number; lng: number; accuracy: number | null } | null {
   const lat = Number(formData.get("lat"));
   const lng = Number(formData.get("lng"));
   const accRaw = formData.get("accuracy");
@@ -44,9 +44,22 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
   }
 }
 
-/** Location from the form, with its address looked up. Null if the phone didn't send one. */
+/** What the driver typed in the Location box, tidied and capped. */
+export function typedPlace(formData: FormData): string | null {
+  const raw = String(formData.get("place") ?? "").replace(/\s+/g, " ").trim();
+  return raw ? raw.slice(0, 120) : null;
+}
+
+/**
+ * Location from the form. A place the driver typed is used as the label
+ * (and the phone's GPS, if allowed, is still kept as the map pin);
+ * otherwise the GPS position is looked up as a street/suburb. Null when
+ * there is neither.
+ */
 export async function tripLocationFrom(formData: FormData): Promise<TripLocation | null> {
   const loc = readLocation(formData);
-  if (!loc) return null;
-  return { ...loc, address: await reverseGeocode(loc.lat, loc.lng) };
+  const typed = typedPlace(formData);
+  if (!loc && !typed) return null;
+  if (!loc) return { lat: null, lng: null, accuracy: null, address: typed };
+  return { ...loc, address: typed ?? (await reverseGeocode(loc.lat, loc.lng)) };
 }

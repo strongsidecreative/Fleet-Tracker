@@ -25,6 +25,14 @@ async function readyRegistration(): Promise<ServiceWorkerRegistration> {
   return navigator.serviceWorker.ready;
 }
 
+// Fetched from the server at run time (see lib/vapid.ts for why).
+async function fetchKey(): Promise<string | null> {
+  const res = await fetch("/api/push/key", { cache: "no-store" });
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { key?: string } | null;
+  return body?.key ?? null;
+}
+
 function sameKey(sub: PushSubscription, key: Uint8Array): boolean {
   const current = sub.options?.applicationServerKey;
   if (!current) return true; // browser doesn't say; assume it matches
@@ -58,6 +66,7 @@ export default function PushSubscribeButton() {
   // allows these in direct response to a tap, and waiting for the service
   // worker in between can use that up.
   const regRef = useRef<ServiceWorkerRegistration | null>(null);
+  const keyRef = useRef<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -70,6 +79,7 @@ export default function PushSubscribeButton() {
         return;
       }
       try {
+        fetchKey().then((k) => (keyRef.current = k)).catch(() => {});
         const reg = await readyRegistration();
         regRef.current = reg;
         const existing = await reg.pushManager.getSubscription();
@@ -85,7 +95,7 @@ export default function PushSubscribeButton() {
     setStatus("working");
     setMessage(null);
     try {
-      const rawKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      const rawKey = keyRef.current ?? (await fetchKey());
       if (!rawKey) throw Object.assign(new Error("Push key missing from this build"), { name: "ConfigError" });
       const key = urlBase64ToUint8Array(rawKey);
       const reg = regRef.current ?? (await readyRegistration());

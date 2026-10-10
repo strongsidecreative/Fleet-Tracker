@@ -22,6 +22,7 @@ export function StartTripForm({ vehicleId, defaultKm }: { vehicleId: string; def
   const boundAction = startTrip.bind(null, vehicleId);
   const [state, formAction] = useFormState(boundAction, { error: null });
   const [locating, setLocating] = useState(true);
+  const [typed, setTyped] = useState(false);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -38,13 +39,29 @@ export function StartTripForm({ vehicleId, defaultKm }: { vehicleId: string; def
           className="w-full rounded-lg border border-steel/30 bg-white px-4 py-3 text-lg focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
         />
       </div>
+      <div>
+        <label htmlFor="place" className="mb-1 block text-sm font-medium text-ink">
+          Start Location <span className="font-normal text-steel">(optional)</span>
+        </label>
+        <input
+          id="place"
+          name="place"
+          type="text"
+          autoComplete="off"
+          maxLength={120}
+          placeholder="e.g. Whakatāne office, 12 King St"
+          onChange={(e) => setTyped(e.target.value.trim() !== "")}
+          className="w-full rounded-lg border border-steel/30 bg-white px-4 py-3 text-base focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <p className="mt-1 text-xs text-steel">Leave blank to use your phone&apos;s location.</p>
+      </div>
       {state.error && (
         <p role="alert" className="text-sm font-medium text-rust">
           {state.error}
         </p>
       )}
       <LocationCapture onSettled={() => setLocating(false)} />
-      <SubmitButton label="Start Vehicle Use" waiting={locating} />
+      <SubmitButton label="Start Vehicle Use" waiting={locating && !typed} />
     </form>
   );
 }
@@ -53,6 +70,7 @@ export function FinishTripForm({ tripId, startKm }: { tripId: string; startKm: n
   const boundAction = finishTrip.bind(null, tripId);
   const [state, formAction] = useFormState(boundAction, { error: null });
   const [locating, setLocating] = useState(true);
+  const [typed, setTyped] = useState(false);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -69,13 +87,29 @@ export function FinishTripForm({ tripId, startKm }: { tripId: string; startKm: n
           className="w-full rounded-lg border border-steel/30 bg-white px-4 py-3 text-lg focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
         />
       </div>
+      <div>
+        <label htmlFor="place" className="mb-1 block text-sm font-medium text-ink">
+          Finish Location <span className="font-normal text-steel">(optional)</span>
+        </label>
+        <input
+          id="place"
+          name="place"
+          type="text"
+          autoComplete="off"
+          maxLength={120}
+          placeholder="e.g. Whakatāne office, 12 King St"
+          onChange={(e) => setTyped(e.target.value.trim() !== "")}
+          className="w-full rounded-lg border border-steel/30 bg-white px-4 py-3 text-base focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <p className="mt-1 text-xs text-steel">Leave blank to use your phone&apos;s location.</p>
+      </div>
       {state.error && (
         <p role="alert" className="text-sm font-medium text-rust">
           {state.error}
         </p>
       )}
       <LocationCapture onSettled={() => setLocating(false)} />
-      <SubmitButton label="Finish Vehicle Use" waiting={locating} />
+      <SubmitButton label="Finish Vehicle Use" waiting={locating && !typed} />
     </form>
   );
 }

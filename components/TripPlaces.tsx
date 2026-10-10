@@ -1,4 +1,4 @@
-import { mapsUrl, placeLabel } from "@/lib/placeLabel";
+import { mapsSearchUrl, mapsUrl, placeLabel } from "@/lib/placeLabel";
 
 type Trip = {
   start_address?: string | null;
@@ -11,9 +11,9 @@ type Trip = {
 
 function Place({ label, lat, lng }: { label: string | null; lat?: number | null; lng?: number | null }) {
   if (!label) return <span className="text-steel">not recorded</span>;
-  if (lat == null || lng == null) return <span>{label}</span>;
+  const href = lat != null && lng != null ? mapsUrl(lat, lng) : mapsSearchUrl(label);
   return (
-    <a href={mapsUrl(lat, lng)} target="_blank" rel="noreferrer" className="text-brand underline">
+    <a href={href} target="_blank" rel="noreferrer" className="text-brand underline">
       {label}
     </a>
   );

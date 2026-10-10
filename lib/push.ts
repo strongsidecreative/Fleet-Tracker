@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import { vapidPublicKey } from "@/lib/vapid";
 
 let configured = false;
 
@@ -6,7 +7,7 @@ function ensureConfigured() {
   if (configured) return;
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || "mailto:admin@example.com",
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    vapidPublicKey()!,
     process.env.VAPID_PRIVATE_KEY!
   );
   configured = true;
