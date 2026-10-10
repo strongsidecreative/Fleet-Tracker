@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/nz-time";
 import { withPhotoUrls } from "@/lib/photos";
+import DownloadLink from "@/components/DownloadLink";
+import PhotoViewer from "@/components/PhotoViewer";
 
 export default async function AdminFuelPage({ searchParams }: { searchParams: { vehicleId?: string } }) {
   const supabase = createClient();
@@ -18,13 +20,8 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
   const { data: logs } = await query;
   const rows = await withPhotoUrls(supabase, logs ?? [], "receipt_photo_url");
 
-  const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
   const totalCost = rows.reduce((s, l) => s + l.cost, 0);
-  // Litres is optional, so $/L only uses fill-ups that recorded litres;
-  // dividing ALL cost by only SOME litres overstated the price.
-  const withLitres = rows.filter((l) => l.litres != null && l.litres > 0);
-  const costWithLitres = withLitres.reduce((s, l) => s + l.cost, 0);
-  const avgPricePerLitre = totalLitres > 0 ? costWithLitres / totalLitres : 0;
+  const avgFill = rows.length > 0 ? totalCost / rows.length : 0;
 
   return (
     <div>
@@ -34,12 +31,12 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
         <a href="/admin/fuel/receipts" className="rounded-lg border border-ink px-3 py-2 text-xs font-semibold text-ink">
           Monthly Receipts
         </a>
-        <a
+        <DownloadLink
           href={`/admin/fuel/export${searchParams.vehicleId ? `?vehicleId=${searchParams.vehicleId}` : ""}`}
           className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
         >
           Export CSV
-        </a>
+        </DownloadLink>
         </div>
       </div>
 
@@ -53,11 +50,7 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
       </p>
 
       {rows.length > 0 && (
-        <div className="mb-5 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-steel/20 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-steel">Total Litres</p>
-            <p className="odometer mt-1 text-xl font-bold text-ink">{totalLitres.toFixed(1)} L</p>
-          </div>
+        <div className="mb-5 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-steel/20 bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-steel">Total Spent</p>
             <p className="odometer mt-1 text-xl font-bold text-ink">
@@ -65,9 +58,9 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
             </p>
           </div>
           <div className="rounded-xl border border-steel/20 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-steel">Avg $/L</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-steel">Avg Fill-up</p>
             <p className="odometer mt-1 text-xl font-bold text-ink">
-              {avgPricePerLitre.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}
+              {avgFill.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}
             </p>
           </div>
         </div>
@@ -86,8 +79,7 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
             <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 text-xs text-steel">
               <span>{l.driver?.name ?? "Unknown driver"}</span>
               <span>
-                {l.litres != null ? `${l.litres.toFixed(1)} L` : "No litres recorded"}
-                {l.odometer_km != null ? ` at ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
+                {l.odometer_km != null ? `At ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
               </span>
               <span className="odometer font-bold text-ink">
                 {l.cost.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}
@@ -96,9 +88,7 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
             {(l.receipt_photo_url || l.notes) && (
               <div className="mt-1 flex items-center gap-3 text-xs">
                 {l.receipt_photo_url && (
-                  <a href={l.receipt_photo_url} target="_blank" rel="noreferrer" className="font-medium text-brand underline">
-                    View Receipt
-                  </a>
+                  <PhotoViewer src={l.receipt_photo_url} className="font-medium text-brand underline" />
                 )}
                 {l.notes && <span className="text-steel">{l.notes}</span>}
               </div>

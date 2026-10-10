@@ -27,7 +27,6 @@ export async function GET(request: Request) {
     vehicle: l.vehicle?.name ?? "",
     registration: l.vehicle?.registration ?? "",
     odometer_km: l.odometer_km,
-    litres: l.litres,
     cost: l.cost,
     notes: l.notes ?? "",
     receipt_url: !l.receipt_photo_url
@@ -37,7 +36,7 @@ export async function GET(request: Request) {
         : l.receipt_photo_url,
   }));
 
-  const csv = toCsv(rows, ["date", "driver", "vehicle", "registration", "odometer_km", "litres", "cost", "notes", "receipt_url"]);
+  const csv = toCsv(rows, ["date", "driver", "vehicle", "registration", "odometer_km", "cost", "notes", "receipt_url"]);
   const suffix = start && end ? `-${start}-to-${end}` : "";
   return csvResponse(csv, `fuel-log${suffix}.csv`);
 }

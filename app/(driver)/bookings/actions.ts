@@ -103,6 +103,7 @@ export async function createBookingRequest(prevState: ActionState, formData: For
   const { error: insertError } = await supabase.from("bookings").insert(rows);
 
   if (insertError) {
+    console.error("[createBookingRequest] insert failed", insertError.code, insertError.message, insertError.details);
     return { error: "Something went wrong submitting this request. Please try again." };
   }
 

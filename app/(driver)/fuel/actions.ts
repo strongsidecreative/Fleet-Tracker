@@ -47,15 +47,6 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
     return { error: "Please enter the total amount paid." };
   }
 
-  const litresRaw = formData.get("litres");
-  let litres: number | null = null;
-  if (litresRaw && String(litresRaw).trim() !== "") {
-    litres = Number(litresRaw);
-    if (Number.isNaN(litres) || litres <= 0) {
-      return { error: "Litres, if entered, needs to be a number greater than 0." };
-    }
-  }
-
   const receipt = formData.get("receipt") as File | null;
   if (!receipt || receipt.size === 0) {
     return { error: "Please attach a photo of the receipt." };
@@ -80,7 +71,6 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
     vehicle_id: vehicleId,
     driver_id: user.id,
     trip_id: tripId,
-    litres,
     cost,
     receipt_photo_url: receiptPhotoUrl,
   });

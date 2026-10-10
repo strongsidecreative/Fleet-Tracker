@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 
 export default async function AdminVehicleChecksPage({
   searchParams,
@@ -22,8 +23,8 @@ export default async function AdminVehicleChecksPage({
   if (driverId) query = query.eq("driver_id", driverId);
   if (type) query = query.eq("check_type", type);
   if (result) query = query.eq("overall_result", result);
-  if (start) query = query.gte("submitted_at", `${start}T00:00:00`);
-  if (end) query = query.lte("submitted_at", `${end}T23:59:59`);
+  if (start) query = query.gte("submitted_at", nzLocalToDate(start).toISOString());
+  if (end) query = query.lt("submitted_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString());
 
   const { data: checks } = await query;
 

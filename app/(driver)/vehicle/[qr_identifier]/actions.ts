@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
+import { tripLocationFrom } from "@/lib/geo";
 
 type ActionState = { error: string | null };
 
@@ -57,10 +58,15 @@ export async function startTrip(
     }
   }
 
+  const where = await tripLocationFrom(formData);
+
   const { error } = await supabase.from("vehicle_usage").insert({
     vehicle_id: vehicleId,
     driver_id: user.id,
     start_km: km,
+    ...(where
+      ? { start_lat: where.lat, start_lng: where.lng, start_accuracy_m: where.accuracy, start_address: where.address }
+      : {}),
   });
 
   if (error) {
@@ -103,12 +109,17 @@ export async function finishTrip(
     return { error: "Please enter the kilometre reading shown on the vehicle." };
   }
 
+  const where = await tripLocationFrom(formData);
+
   const { data: finished, error } = await supabase
     .from("vehicle_usage")
     .update({
       end_km: km,
       end_datetime: new Date().toISOString(),
       status: "completed",
+      ...(where
+        ? { end_lat: where.lat, end_lng: where.lng, end_accuracy_m: where.accuracy, end_address: where.address }
+        : {}),
     })
     .eq("id", tripId)
     .eq("driver_id", user.id)

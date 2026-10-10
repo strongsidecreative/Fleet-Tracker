@@ -38,7 +38,6 @@ function safe(part: string): string {
 type FuelRow = {
   id: string;
   created_at: string;
-  litres: number | null;
   cost: number;
   notes: string | null;
   receipt_photo_url: string | null;
@@ -57,7 +56,7 @@ export async function getMonthReceipts(client: SupabaseClient, organisationId: s
   const { fromIso, toIso } = monthRangeIso(monthKey);
   const { data } = await client
     .from("fuel_logs")
-    .select("id, created_at, litres, cost, notes, receipt_photo_url, receipt_purged_at, vehicle:vehicles(name, registration), driver:profiles(name)")
+    .select("id, created_at, cost, notes, receipt_photo_url, receipt_purged_at, vehicle:vehicles(name, registration), driver:profiles(name)")
     .eq("organisation_id", organisationId)
     .gte("created_at", fromIso)
     .lt("created_at", toIso)
@@ -86,14 +85,13 @@ export async function getMonthReceipts(client: SupabaseClient, organisationId: s
       driver: r.driver?.name ?? "",
       vehicle: r.vehicle?.name ?? "",
       registration: r.vehicle?.registration ?? "",
-      litres: r.litres ?? "",
       cost: r.cost.toFixed(2),
       notes: r.notes ?? "",
       receipt_file: fileName || (r.receipt_purged_at ? "(photo cleared)" : "(no photo)"),
     };
   });
 
-  const csv = toCsv(csvRows, ["date", "time", "driver", "vehicle", "registration", "litres", "cost", "notes", "receipt_file"]);
+  const csv = toCsv(csvRows, ["date", "time", "driver", "vehicle", "registration", "cost", "notes", "receipt_file"]);
   return {
     monthKey,
     label: monthLabel(monthKey),
@@ -145,6 +143,6 @@ ${month.files.length} receipt photo${month.files.length === 1 ? "" : "s"} across
       ? "They're attached as a ZIP, with a spreadsheet (CSV) of every fill-up. Save it somewhere safe for your records."
       : `Download them as a ZIP (photos plus a spreadsheet of every fill-up) here:<br><a href="${escapeHtml(pageUrl)}">${escapeHtml(pageUrl)}</a>`
   }</p>
-<p style="color:#57647C;font-size:13px">Fleet Tracker clears receipt photos from the app a few months after they've been downloaded or emailed, to stay within free storage. The fuel log itself (date, driver, vehicle, litres, cost) is always kept.</p>
+<p style="color:#57647C;font-size:13px">Fleet Tracker clears receipt photos from the app a few months after they've been downloaded or emailed, to stay within free storage. The fuel log itself (date, driver, vehicle, cost) is always kept.</p>
 </div>`;
 }

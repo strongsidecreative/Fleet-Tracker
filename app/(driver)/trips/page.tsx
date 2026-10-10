@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current";
+import TripPlaces from "@/components/TripPlaces";
 
 export default async function MyTripsPage() {
   const supabase = createClient();
@@ -34,6 +35,7 @@ export default async function MyTripsPage() {
               </span>
               <span className="odometer font-bold text-ink">{t.kilometres_used?.toLocaleString("en-NZ")} KM</span>
             </div>
+            <TripPlaces trip={t} />
           </div>
         ))}
       </div>

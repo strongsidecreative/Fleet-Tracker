@@ -1,6 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
+
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    console.error("[app error]", error?.digest ?? "", error);
+  }, [error]);
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-paper px-4 text-center">
       <p className="font-display text-6xl font-bold text-rust">!</p>
@@ -8,6 +13,11 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       <p className="mt-2 max-w-sm text-sm text-steel">
         That's on us, not you. Try again, and if it keeps happening, let the admin know what you were doing.
       </p>
+      {error?.digest && (
+        <p className="mt-3 text-xs text-steel">
+          Reference: <span className="font-mono">{error.digest}</span>
+        </p>
+      )}
       <button onClick={() => reset()} className="mt-6 rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-paper">
         Try Again
       </button>

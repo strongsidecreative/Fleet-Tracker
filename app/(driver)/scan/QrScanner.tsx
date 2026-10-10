@@ -5,11 +5,33 @@ import { useRouter } from "next/navigation";
 
 const SCANNER_ELEMENT_ID = "qr-reader";
 
+// html5-qrcode's stop() THROWS (synchronously, not a rejected promise) when
+// the scanner is already stopped or still stopping. We used to call it on
+// a successful scan AND again when the page unmounted during navigation;
+// that second call threw inside React's cleanup and showed the error
+// screen for a moment before the vehicle page loaded. Every stop now goes
+// through here, runs at most once, and can never throw.
+async function safeStop(scanner: any, stoppedRef: { current: boolean }) {
+  if (!scanner || stoppedRef.current) return;
+  stoppedRef.current = true;
+  try {
+    await scanner.stop();
+  } catch {
+    // already stopped, or the camera never started
+  }
+  try {
+    scanner.clear();
+  } catch {
+    // element already gone
+  }
+}
+
 export default function QrScanner() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<any>(null);
   const handledRef = useRef(false);
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,14 +58,16 @@ export default function QrScanner() {
               path = `/vehicle/${decodedText}`;
             }
 
-            scanner.stop().catch(() => {});
-            router.push(path);
+            // Stop the camera first, then navigate, so the scanner isn't
+            // torn down mid-stop by the page change.
+            safeStop(scanner, stoppedRef).finally(() => router.push(path));
           },
           () => {
             // Fires continuously while no code is found — ignored, not an error.
           }
         )
         .catch(() => {
+          if (cancelled || handledRef.current) return;
           setError(
             "Couldn't access the camera. Check that you've allowed camera permission for this site, or try a different browser."
           );
@@ -52,9 +76,7 @@ export default function QrScanner() {
 
     return () => {
       cancelled = true;
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-      }
+      void safeStop(scannerRef.current, stoppedRef);
     };
   }, [router]);
 

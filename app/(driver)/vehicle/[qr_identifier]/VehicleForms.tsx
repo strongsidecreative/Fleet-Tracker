@@ -1,17 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { startTrip, finishTrip } from "./actions";
+import LocationCapture from "@/components/LocationCapture";
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ label, waiting }: { label: string; waiting: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || waiting}
       className="w-full rounded-xl bg-ink py-3 text-base font-semibold text-paper disabled:opacity-60"
     >
-      {pending ? "Saving…" : label}
+      {pending ? "Saving…" : waiting ? "Getting location…" : label}
     </button>
   );
 }
@@ -19,6 +21,7 @@ function SubmitButton({ label }: { label: string }) {
 export function StartTripForm({ vehicleId, defaultKm }: { vehicleId: string; defaultKm: number }) {
   const boundAction = startTrip.bind(null, vehicleId);
   const [state, formAction] = useFormState(boundAction, { error: null });
+  const [locating, setLocating] = useState(true);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -40,7 +43,8 @@ export function StartTripForm({ vehicleId, defaultKm }: { vehicleId: string; def
           {state.error}
         </p>
       )}
-      <SubmitButton label="Start Vehicle Use" />
+      <LocationCapture onSettled={() => setLocating(false)} />
+      <SubmitButton label="Start Vehicle Use" waiting={locating} />
     </form>
   );
 }
@@ -48,6 +52,7 @@ export function StartTripForm({ vehicleId, defaultKm }: { vehicleId: string; def
 export function FinishTripForm({ tripId, startKm }: { tripId: string; startKm: number }) {
   const boundAction = finishTrip.bind(null, tripId);
   const [state, formAction] = useFormState(boundAction, { error: null });
+  const [locating, setLocating] = useState(true);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -69,7 +74,8 @@ export function FinishTripForm({ tripId, startKm }: { tripId: string; startKm: n
           {state.error}
         </p>
       )}
-      <SubmitButton label="Finish Vehicle Use" />
+      <LocationCapture onSettled={() => setLocating(false)} />
+      <SubmitButton label="Finish Vehicle Use" waiting={locating} />
     </form>
   );
 }

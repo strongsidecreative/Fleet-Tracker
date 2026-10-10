@@ -3,6 +3,7 @@ import { fmtDate } from "@/lib/nz-time";
 import BackButton from "@/components/BackButton";
 import { getCurrentUser } from "@/lib/supabase/current";
 import { withPhotoUrls } from "@/lib/photos";
+import PhotoViewer from "@/components/PhotoViewer";
 
 export default async function MyFuelPage() {
   const supabase = createClient();
@@ -16,7 +17,6 @@ export default async function MyFuelPage() {
     .limit(50);
 
   const rows = await withPhotoUrls(supabase, logs ?? [], "receipt_photo_url");
-  const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
   const totalCost = rows.reduce((s, l) => s + l.cost, 0);
 
   return (
@@ -28,11 +28,7 @@ export default async function MyFuelPage() {
       </div>
 
       {rows.length > 0 && (
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-steel/20 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-steel">Total Litres</p>
-            <p className="odometer mt-1 text-2xl font-bold text-ink">{totalLitres.toFixed(1)} L</p>
-          </div>
+        <div className="mb-4 grid grid-cols-1 gap-3">
           <div className="rounded-xl border border-steel/20 bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-steel">Total Spent</p>
             <p className="odometer mt-1 text-2xl font-bold text-ink">
@@ -52,17 +48,14 @@ export default async function MyFuelPage() {
             </div>
             <div className="mt-1 flex items-center justify-between text-xs text-steel">
               <span>
-                {l.litres != null ? `${l.litres.toFixed(1)} L` : "No litres recorded"}
-                {l.odometer_km != null ? ` at ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
+                {l.odometer_km != null ? `At ${l.odometer_km.toLocaleString("en-NZ")} KM` : ""}
               </span>
               <span className="odometer font-bold text-ink">
                 {l.cost.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}
               </span>
             </div>
             {l.receipt_photo_url && (
-              <a href={l.receipt_photo_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs font-medium text-brand underline">
-                View Receipt
-              </a>
+              <PhotoViewer src={l.receipt_photo_url} className="mt-1 inline-block text-xs font-medium text-brand underline" />
             )}
             {l.notes && <p className="mt-1 text-xs text-steel">{l.notes}</p>}
           </div>

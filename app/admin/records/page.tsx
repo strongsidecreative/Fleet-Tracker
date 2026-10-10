@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import SuccessBanner from "@/components/SuccessBanner";
 import CloseSessionForm from "./CloseSessionForm";
+import TripPlaces from "@/components/TripPlaces";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+import { Fragment } from "react";
+import DownloadLink from "@/components/DownloadLink";
 
 function hoursOpen(start: string) {
   const ms = Date.now() - new Date(start).getTime();
@@ -26,8 +30,8 @@ export default async function AdminRecordsPage({
   if (driverId) query = query.eq("driver_id", driverId);
   if (vehicleId) query = query.eq("vehicle_id", vehicleId);
   if (status) query = query.eq("status", status);
-  if (start) query = query.gte("start_datetime", `${start}T00:00:00`);
-  if (end) query = query.lte("start_datetime", `${end}T23:59:59`);
+  if (start) query = query.gte("start_datetime", nzLocalToDate(start).toISOString());
+  if (end) query = query.lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString());
 
   // None of these four depend on each other — the filter dropdowns, the
   // always-shown open-sessions list, and the filtered table all fetch
@@ -76,6 +80,7 @@ export default async function AdminRecordsPage({
                   {new Date(t.start_datetime).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}{" "}
                   · Start KM: {t.start_km.toLocaleString("en-NZ")}
                 </p>
+                <TripPlaces trip={t} />
                 <CloseSessionForm tripId={t.id} />
               </div>
             ))}
@@ -85,12 +90,12 @@ export default async function AdminRecordsPage({
 
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">Usage Records</h1>
-        <a
+        <DownloadLink
           href={`/admin/records/export${exportParams.toString() ? `?${exportParams}` : ""}`}
           className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
         >
           Export CSV
-        </a>
+        </DownloadLink>
       </div>
 
       <form method="get" className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-steel/20 bg-white p-3 sm:grid-cols-5">
@@ -130,7 +135,8 @@ export default async function AdminRecordsPage({
           </thead>
           <tbody>
             {trips?.map((t) => (
-              <tr key={t.id} className="border-b border-steel/10 last:border-0">
+              <Fragment key={t.id}>
+              <tr className={t.start_address || t.start_lat != null || t.end_lat != null ? "" : "border-b border-steel/10"}>
                 <td className="px-3 py-2 text-ink">
                   {new Date(t.start_datetime).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short" })}
                 </td>
@@ -141,6 +147,14 @@ export default async function AdminRecordsPage({
                 </td>
                 <td className="px-3 py-2 capitalize text-ink">{t.status}</td>
               </tr>
+              {(t.start_address || t.start_lat != null || t.end_lat != null) && (
+                <tr className="border-b border-steel/10">
+                  <td colSpan={5} className="px-3 pb-2 pt-0">
+                    <TripPlaces trip={t} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
             {(!trips || trips.length === 0) && (
               <tr>

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { overallSeverity, SEVERITY_BADGE_CLASS, SEVERITY_LABEL } from "@/lib/vehicleAlerts";
 import SuccessBanner from "@/components/SuccessBanner";
+import DownloadLink from "@/components/DownloadLink";
 
 export default async function AdminVehiclesPage() {
   const supabase = createClient();
@@ -85,9 +86,9 @@ export default async function AdminVehiclesPage() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">Vehicles</h1>
         <div className="flex gap-2">
-          <a href="/admin/vehicles/export" className="rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink">
+          <DownloadLink href="/admin/vehicles/export" className="rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink">
             Export CSV
-          </a>
+          </DownloadLink>
           <Link href="/admin/vehicles/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
             Add Vehicle
           </Link>

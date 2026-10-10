@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { toggleUserActive, resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin, deletePermanentlyFromAdmin, deleteDriverAndRecordsFromAdmin } from "../users/actions";
+import { resendInvite, deactivateDriverFromAdmin, removeDriverPersonalInfoFromAdmin, deletePermanentlyFromAdmin, deleteDriverAndRecordsFromAdmin } from "../users/actions";
 import { driverIdsWithHistory } from "../users/history";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SwipeableRow from "@/components/SwipeableRow";
@@ -9,6 +9,8 @@ import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import SuccessBanner from "@/components/SuccessBanner";
 import ErrorBanner from "@/components/ErrorBanner";
 import { licenceSeverity, LICENCE_LABEL, LICENCE_BADGE_CLASS } from "@/lib/licenceStatus";
+import { getCurrentUser } from "@/lib/supabase/current";
+import DownloadLink from "@/components/DownloadLink";
 
 // Drivers and Admins used to be two separate top-level nav tabs, but both
 // are just the `profiles` table filtered by role — this merges them into
@@ -48,10 +50,115 @@ export default async function AdminPeoplePage({
   );
 
   if (role === "admin") {
-    const [{ data: admins }, pendingIds] = await Promise.all([
+    const [{ data: admins }, pendingIds, me] = await Promise.all([
       supabase.from("profiles").select("*").eq("role", "admin").order("name"),
       pendingIdsPromise,
+      getCurrentUser(),
     ]);
+
+    // Same lifecycle as drivers (see the driver rows below): Deactivate
+    // (frees the email, deletes outright if they have no history),
+    // Remove (clears name + email), Delete permanently or Delete with
+    // records. Never offered on your own row, and the last active admin
+    // can't be deactivated (enforced in the actions too).
+    const inactiveAdminIds = (admins ?? []).filter((a) => !a.active).map((a) => a.id);
+    const adminsWithHistory = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? await driverIdsWithHistory(createAdminClient(), inactiveAdminIds)
+      : new Set(inactiveAdminIds);
+    const activeAdminCount = (admins ?? []).filter((a) => a.active).length;
+
+    const AdminRow = ({ a }: { a: NonNullable<typeof admins>[number] }) => {
+      const isMe = a.id === me?.id;
+      const personalInfoRemoved = a.email.endsWith("@fleet-tracker.invalid");
+      const lastActive = a.active && activeAdminCount <= 1;
+      const rowActions = isMe ? null : (
+        <>
+          {a.active && pendingIds.has(a.id) && (
+            <form action={resendInvite.bind(null, a.email, "admin")} className="flex">
+              <button type="submit" className="flex h-full min-w-[104px] items-center justify-center bg-brand px-4 text-xs font-semibold text-paper">
+                Resend invite
+              </button>
+            </form>
+          )}
+          {a.active && !lastActive && (
+            <form action={deactivateDriverFromAdmin.bind(null, a.id)} className="flex">
+              <ConfirmSubmitButton
+                confirmMessage={`Deactivate ${a.name}? They'll be signed out and can't sign in again. Can't be undone (you can invite their email again).`}
+                className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+              >
+                Deactivate
+              </ConfirmSubmitButton>
+            </form>
+          )}
+          {!a.active && !personalInfoRemoved && (
+            <form action={removeDriverPersonalInfoFromAdmin.bind(null, a.id)} className="flex">
+              <ConfirmSubmitButton
+                confirmMessage={`Remove ${a.name}'s email and name? Can't be undone. Their approvals and history stay, shown as "Removed Admin". The email is free to invite again.`}
+                className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+              >
+                Remove
+              </ConfirmSubmitButton>
+            </form>
+          )}
+          {!a.active && !adminsWithHistory.has(a.id) && (
+            <form action={deletePermanentlyFromAdmin.bind(null, a.id)} className="flex">
+              <ConfirmSubmitButton
+                confirmMessage={`Permanently delete ${a.name}? They have no history, so nothing else is affected. Can't be undone.`}
+                className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+              >
+                Delete permanently
+              </ConfirmSubmitButton>
+            </form>
+          )}
+          {!a.active && adminsWithHistory.has(a.id) && (
+            <form action={deleteDriverAndRecordsFromAdmin.bind(null, a.id)} className="flex">
+              <ConfirmSubmitButton
+                confirmMessage={`Delete ${a.name} and ALL their records? Their own trips, bookings, checks, fuel logs, incidents and audit entries are deleted; approvals they made stay but no longer name them. Can't be undone.`}
+                className="flex h-full min-w-[104px] items-center justify-center bg-rust px-4 text-xs font-semibold text-paper"
+              >
+                Delete with records
+              </ConfirmSubmitButton>
+            </form>
+          )}
+        </>
+      );
+
+      const card = (
+        <div className="rounded-xl border border-steel/20 bg-white p-3">
+          <p className="font-medium text-ink">
+            {a.name}{" "}
+            {isMe && <span className="text-xs text-steel">(you)</span>}{" "}
+            {!a.active && <span className="text-xs text-steel">{personalInfoRemoved ? "(removed)" : "(deactivated)"}</span>}
+          </p>
+          <p className="text-xs text-steel">{a.email}</p>
+          {a.active && pendingIds.has(a.id) && (
+            <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
+              Invite pending
+            </span>
+          )}
+          {lastActive && !isMe && <p className="mt-1 text-xs text-steel">Last active admin, can&apos;t be deactivated.</p>}
+        </div>
+      );
+
+      return rowActions ? <SwipeableRow actions={rowActions}>{card}</SwipeableRow> : card;
+    };
+
+    const activeAdmins = (admins ?? []).filter((a) => a.active && !pendingIds.has(a.id));
+    const pendingAdmins = (admins ?? []).filter((a) => a.active && pendingIds.has(a.id));
+    const inactiveAdmins = (admins ?? []).filter((a) => !a.active);
+    const AdminSection = ({ title, list }: { title: string; list: typeof activeAdmins }) =>
+      list.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-steel">
+            {title} ({list.length})
+          </p>
+          <div className="space-y-2">
+            {list.map((a) => (
+              <AdminRow key={a.id} a={a} />
+            ))}
+          </div>
+        </div>
+      ) : null;
 
     return (
       <div>
@@ -66,49 +173,17 @@ export default async function AdminPeoplePage({
             Add Admin
           </Link>
         </div>
-        <div className="space-y-2">
-          {admins?.map((a) => (
-            <div key={a.id} className="flex items-center justify-between rounded-xl border border-steel/20 bg-white p-3">
-              <div>
-                <p className="font-medium text-ink">
-                  {a.name} {!a.active && <span className="text-xs text-steel">(inactive)</span>}
-                </p>
-                <p className="text-xs text-steel">{a.email}</p>
-                {a.active && pendingIds.has(a.id) && (
-                  <span className="mt-1 inline-block rounded-full bg-amber/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber">
-                    Invite pending
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {a.active && pendingIds.has(a.id) && (
-                  <form action={resendInvite.bind(null, a.email, "admin")}>
-                    <button type="submit" className="text-xs font-medium text-brand underline">
-                      Resend invite
-                    </button>
-                  </form>
-                )}
-                <form action={toggleUserActive.bind(null, a.id, !a.active)}>
-                  <ConfirmSubmitButton
-                    confirmMessage={
-                      a.active
-                        ? `Deactivate ${a.name}? They won't be able to log in until reactivated.`
-                        : `Reactivate ${a.name}?`
-                    }
-                    className="text-xs font-medium text-steel underline"
-                  >
-                    {a.active ? "Deactivate" : "Reactivate"}
-                  </ConfirmSubmitButton>
-                </form>
-              </div>
-            </div>
-          ))}
-          {(!admins || admins.length === 0) && (
-            <p className="rounded-xl border border-steel/20 bg-white p-4 text-sm text-steel">No admins yet.</p>
-          )}
-        </div>
+        {(!admins || admins.length === 0) ? (
+          <p className="rounded-xl border border-steel/20 bg-white p-4 text-sm text-steel">No admins yet.</p>
+        ) : (
+          <div className="space-y-5">
+            <AdminSection title="Active" list={activeAdmins} />
+            <AdminSection title="Pending" list={pendingAdmins} />
+            <AdminSection title="Inactive" list={inactiveAdmins} />
+          </div>
+        )}
         <p className="mt-3 text-xs text-steel">
-          Deactivating yourself will lock you out — make sure at least one other admin can log in first.
+          Swipe an admin left for actions, same as drivers. You can&apos;t remove yourself or the last active admin.
         </p>
       </div>
     );
@@ -152,9 +227,9 @@ export default async function AdminPeoplePage({
           <TabLink value="admin" label="Admins" />
         </div>
         <div className="flex gap-2">
-          <a href="/admin/drivers/export" className="rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink">
+          <DownloadLink href="/admin/drivers/export" className="rounded-lg border border-steel/30 px-3 py-2 text-xs font-semibold text-ink">
             Export CSV
-          </a>
+          </DownloadLink>
           <Link href="/admin/drivers/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
             Add Driver
           </Link>

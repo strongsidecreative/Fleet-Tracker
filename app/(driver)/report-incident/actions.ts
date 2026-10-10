@@ -54,6 +54,7 @@ export async function submitIncident(prevState: ActionState, formData: FormData)
   });
 
   if (error) {
+    console.error("[reportIncident] insert failed", error.code, error.message, error.details);
     return { error: "Something went wrong submitting this report. Please try again." };
   }
 

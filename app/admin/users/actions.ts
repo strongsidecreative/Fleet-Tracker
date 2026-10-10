@@ -110,51 +110,66 @@ export async function resendInvite(email: string, role: "driver" | "admin") {
   redirect(`/admin/people?role=${role}&success=Invite resent`);
 }
 
-// Confirms the caller is allowed to deactivate this particular driver:
-// either the driver deactivating themselves, or an admin deactivating a
-// driver in their own organisation. Runs against the caller's own
-// cookie-scoped client (RLS applies), never the service-role one — so
-// this check can't be bypassed by calling the server action directly
-// with an arbitrary userId.
-async function requireSelfOrOwnOrgDriver(targetUserId: string): Promise<{ error: string | null }> {
+type TargetCheck = { error: string | null; role: "driver" | "admin" };
+
+/**
+ * Confirms the caller may deactivate / remove / delete this person:
+ * - a driver acting on themselves (self-service deactivation), or
+ * - an admin acting on a driver OR another admin in their own organisation.
+ * Admins can't do this to themselves, and the organisation's last active
+ * admin can't be deactivated, so nobody can lock an organisation out.
+ * Runs against the caller's own cookie-scoped client (RLS applies), so it
+ * can't be bypassed by calling the server action with an arbitrary id.
+ */
+async function requireManageableTarget(targetUserId: string): Promise<TargetCheck> {
+  const denied: TargetCheck = { error: "You're not authorised to do that.", role: "driver" };
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "You need to be signed in to do that." };
-  }
-
-  if (user.id === targetUserId) {
-    return { error: null };
-  }
+  if (!user) return { error: "You need to be signed in to do that.", role: "driver" };
 
   const { data: callerProfile } = await supabase
     .from("profiles")
     .select("role, organisation_id")
     .eq("id", user.id)
     .single();
+  if (!callerProfile) return denied;
 
-  if (callerProfile?.role !== "admin") {
-    return { error: "You're not authorised to do that." };
+  if (user.id === targetUserId) {
+    // Self-service is for drivers only; admins are managed by another admin.
+    return callerProfile.role === "driver"
+      ? { error: null, role: "driver" }
+      : { error: "You can't remove your own admin account. Ask another admin to do it.", role: "admin" };
   }
+
+  if (callerProfile.role !== "admin") return denied;
 
   const { data: targetProfile } = await supabase
     .from("profiles")
-    .select("role, organisation_id")
+    .select("role, active, organisation_id")
     .eq("id", targetUserId)
     .single();
+  if (!targetProfile || targetProfile.organisation_id !== callerProfile.organisation_id) return denied;
+  if (targetProfile.role !== "driver" && targetProfile.role !== "admin") return denied;
 
-  if (
-    !targetProfile ||
-    targetProfile.role !== "driver" ||
-    targetProfile.organisation_id !== callerProfile.organisation_id
-  ) {
-    return { error: "You're not authorised to do that." };
+  if (targetProfile.role === "admin" && targetProfile.active) {
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("organisation_id", callerProfile.organisation_id)
+      .eq("role", "admin")
+      .eq("active", true)
+      .neq("id", targetUserId);
+    if (!count) return { error: "That's the last active admin. Add another admin first.", role: "admin" };
   }
 
-  return { error: null };
+  return { error: null, role: targetProfile.role };
+}
+
+/** Notifications addressed to someone aren't history; clear them so the login can be deleted. */
+async function clearNotificationsFor(adminClient: ReturnType<typeof createAdminClient>, userId: string) {
+  await adminClient.from("notifications").delete().eq("recipient_id", userId);
 }
 
 /**
@@ -181,11 +196,12 @@ async function requireSelfOrOwnOrgDriver(targetUserId: string): Promise<{ error:
  */
 export async function deactivateDriverAndFreeEmail(
   userId: string
-): Promise<{ error: string | null; deleted?: boolean }> {
-  const authCheck = await requireSelfOrOwnOrgDriver(userId);
+): Promise<{ error: string | null; deleted?: boolean; role?: "driver" | "admin" }> {
+  const authCheck = await requireManageableTarget(userId);
   if (authCheck.error) {
     return authCheck;
   }
+  const role = authCheck.role;
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return {
@@ -198,13 +214,14 @@ export async function deactivateDriverAndFreeEmail(
 
   const hasHistory = await driverHasHistory(adminClient, userId);
   if (!hasHistory) {
+    await clearNotificationsFor(adminClient, userId);
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
     if (!deleteError) {
       // profiles.id -> auth.users(id) on delete cascade, so the profile
       // row is already gone too — nothing left to update.
       revalidatePath("/admin/people");
       revalidatePath("/account");
-      return { error: null, deleted: true };
+      return { error: null, deleted: true, role };
     }
     // Fall through to the placeholder flow below rather than surface a
     // dead end — e.g. a table was missed in history.ts, or some other
@@ -233,7 +250,7 @@ export async function deactivateDriverAndFreeEmail(
   revalidatePath("/admin/people");
   revalidatePath("/account");
 
-  return { error: null, deleted: false };
+  return { error: null, deleted: false, role };
 }
 
 /**
@@ -244,14 +261,16 @@ export async function deactivateDriverAndFreeEmail(
  */
 export async function deactivateDriverFromAdmin(userId: string) {
   const result = await deactivateDriverAndFreeEmail(userId);
+  const role = result.role ?? "driver";
+  const label = role === "admin" ? "Admin" : "Driver";
   if (result.error) {
-    redirect(`/admin/people?role=driver&error=${encodeURIComponent(result.error)}`);
+    redirect(`/admin/people?role=${role}&error=${encodeURIComponent(result.error)}`);
   }
   redirect(
-    `/admin/people?role=driver&success=${encodeURIComponent(
+    `/admin/people?role=${role}&success=${encodeURIComponent(
       result.deleted
-        ? "Driver removed — they had no trip history, so nothing was left behind."
-        : "Driver deactivated. Their email is free to invite again."
+        ? `${label} removed. They had no history, so nothing was left behind.`
+        : `${label} deactivated. Their email is free to invite again.`
     )}`
   );
 }
@@ -277,8 +296,8 @@ export async function deactivateDriverFromAdmin(userId: string) {
  * Deliberately a separate, explicit step from Deactivate — driver-only,
  * and only meaningful once a driver is already deactivated.
  */
-export async function removeDriverPersonalInfo(userId: string): Promise<{ error: string | null }> {
-  const authCheck = await requireSelfOrOwnOrgDriver(userId);
+export async function removeDriverPersonalInfo(userId: string): Promise<{ error: string | null; role?: "driver" | "admin" }> {
+  const authCheck = await requireManageableTarget(userId);
   if (authCheck.error) {
     return authCheck;
   }
@@ -309,11 +328,14 @@ export async function removeDriverPersonalInfo(userId: string): Promise<{ error:
     return { error: "Something went wrong removing this driver's details. Please try again." };
   }
 
-  await adminClient.from("profiles").update({ email: placeholderEmail, name: "Removed Driver" }).eq("id", userId);
+  await adminClient
+    .from("profiles")
+    .update({ email: placeholderEmail, name: authCheck.role === "admin" ? "Removed Admin" : "Removed Driver" })
+    .eq("id", userId);
 
   revalidatePath("/admin/people");
 
-  return { error: null };
+  return { error: null, role: authCheck.role };
 }
 
 /**
@@ -323,11 +345,14 @@ export async function removeDriverPersonalInfo(userId: string): Promise<{ error:
  */
 export async function removeDriverPersonalInfoFromAdmin(userId: string) {
   const result = await removeDriverPersonalInfo(userId);
+  const role = result.role ?? "driver";
   if (result.error) {
-    redirect(`/admin/people?role=driver&error=${encodeURIComponent(result.error)}`);
+    redirect(`/admin/people?role=${role}&error=${encodeURIComponent(result.error)}`);
   }
   redirect(
-    `/admin/people?role=driver&success=${encodeURIComponent("Personal details removed. The email address is free to invite again any time from Add Driver.")}`
+    `/admin/people?role=${role}&success=${encodeURIComponent(
+      `Personal details removed. The email address is free to invite again any time from Add ${role === "admin" ? "Admin" : "Driver"}.`
+    )}`
   );
 }
 
@@ -348,10 +373,7 @@ export async function deletePermanentlyFromAdmin(userId: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: callerProfile } = await supabase
     .from("profiles")
@@ -366,7 +388,7 @@ export async function deletePermanentlyFromAdmin(userId: string) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     redirect(
       `/admin/people?role=driver&error=${encodeURIComponent(
-        "The service role key isn't set up yet, so this driver can't be deleted. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again."
+        "The service role key isn't set up yet, so this person can't be deleted. Add SUPABASE_SERVICE_ROLE_KEY to your environment (see README), then try again."
       )}`
     );
   }
@@ -379,38 +401,31 @@ export async function deletePermanentlyFromAdmin(userId: string) {
     .eq("id", userId)
     .single();
 
+  const role: "driver" | "admin" = targetProfile?.role === "admin" ? "admin" : "driver";
+  const back = (kind: "error" | "success", msg: string) =>
+    redirect(`/admin/people?role=${role}&${kind}=${encodeURIComponent(msg)}`);
+
   if (
     !targetProfile ||
-    targetProfile.role !== "driver" ||
-    targetProfile.organisation_id !== callerProfile.organisation_id
+    (targetProfile.role !== "driver" && targetProfile.role !== "admin") ||
+    targetProfile.organisation_id !== callerProfile!.organisation_id ||
+    userId === user!.id
   ) {
-    redirect(`/admin/people?role=driver&error=${encodeURIComponent("You're not authorised to do that.")}`);
+    back("error", "You're not authorised to do that.");
   }
 
-  if (targetProfile!.active) {
-    redirect(
-      `/admin/people?role=driver&error=${encodeURIComponent("Deactivate this driver before deleting them.")}`
-    );
+  if (targetProfile!.active) back("error", "Deactivate them before deleting them.");
+
+  if (await driverHasHistory(adminClient, userId)) {
+    back("error", "They have trip, booking, check, fuel or approval history and can't be permanently deleted. Use Delete with records instead.");
   }
 
-  const hasHistory = await driverHasHistory(adminClient, userId);
-  if (hasHistory) {
-    redirect(
-      `/admin/people?role=driver&error=${encodeURIComponent(
-        "This driver has trip, booking, check or fuel history and can't be permanently deleted."
-      )}`
-    );
-  }
-
+  await clearNotificationsFor(adminClient, userId);
   const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
-  if (deleteError) {
-    redirect(
-      `/admin/people?role=driver&error=${encodeURIComponent("Something went wrong deleting this driver. Please try again.")}`
-    );
-  }
+  if (deleteError) back("error", "Something went wrong deleting this person. Please try again.");
 
   revalidatePath("/admin/people");
-  redirect(`/admin/people?role=driver&success=${encodeURIComponent("Driver permanently deleted.")}`);
+  back("success", `${role === "admin" ? "Admin" : "Driver"} permanently deleted.`);
 }
 
 /**
@@ -428,7 +443,8 @@ export async function deletePermanentlyFromAdmin(userId: string) {
  * deleting those rows. Stops at the first failed step.
  */
 export async function deleteDriverAndRecordsFromAdmin(userId: string) {
-  const fail = (msg: string) => redirect(`/admin/people?role=driver&error=${encodeURIComponent(msg)}`);
+  let role: "driver" | "admin" = "driver";
+  const fail = (msg: string) => redirect(`/admin/people?role=${role}&error=${encodeURIComponent(msg)}`);
 
   const supabase = createClient();
   const {
@@ -454,10 +470,16 @@ export async function deleteDriverAndRecordsFromAdmin(userId: string) {
     .select("role, active, organisation_id")
     .eq("id", userId)
     .single();
-  if (!targetProfile || targetProfile.role !== "driver" || targetProfile.organisation_id !== callerProfile!.organisation_id) {
+  if (targetProfile?.role === "admin") role = "admin";
+  if (
+    !targetProfile ||
+    (targetProfile.role !== "driver" && targetProfile.role !== "admin") ||
+    targetProfile.organisation_id !== callerProfile!.organisation_id ||
+    userId === user!.id
+  ) {
     fail("You're not authorised to do that.");
   }
-  if (targetProfile!.active) fail("Deactivate this driver before deleting them.");
+  if (targetProfile!.active) fail("Deactivate them before deleting them.");
 
   const { data: activeTrip } = await adminClient
     .from("vehicle_usage")
@@ -528,7 +550,7 @@ export async function deleteDriverAndRecordsFromAdmin(userId: string) {
   if (deleteError) fail("Every record for this driver was deleted, but removing the login itself failed. Please try again.");
 
   revalidatePath("/admin/people");
-  redirect(`/admin/people?role=driver&success=${encodeURIComponent("Driver and all their records deleted.")}`);
+  redirect(`/admin/people?role=${role}&success=${encodeURIComponent(`${role === "admin" ? "Admin" : "Driver"} and all their records deleted.`)}`);
 }
 
 /**

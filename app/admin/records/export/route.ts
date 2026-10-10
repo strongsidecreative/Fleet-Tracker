@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+import { placeLabel } from "@/lib/placeLabel";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,8 +20,8 @@ export async function GET(request: Request) {
   if (driverId) query = query.eq("driver_id", driverId);
   if (vehicleId) query = query.eq("vehicle_id", vehicleId);
   if (status) query = query.eq("status", status);
-  if (start) query = query.gte("start_datetime", `${start}T00:00:00`);
-  if (end) query = query.lte("start_datetime", `${end}T23:59:59`);
+  if (start) query = query.gte("start_datetime", nzLocalToDate(start).toISOString());
+  if (end) query = query.lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString());
 
   const { data: trips } = await query;
 
@@ -34,6 +36,10 @@ export async function GET(request: Request) {
     start_time: new Date(t.start_datetime).toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland" }),
     end_time: t.end_datetime ? new Date(t.end_datetime).toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland" }) : "",
     status: t.status,
+    start_location: placeLabel(t.start_address, t.start_lat, t.start_lng) ?? "",
+    end_location: placeLabel(t.end_address, t.end_lat, t.end_lng) ?? "",
+    start_coords: t.start_lat != null ? `${t.start_lat},${t.start_lng}` : "",
+    end_coords: t.end_lat != null ? `${t.end_lat},${t.end_lng}` : "",
   }));
 
   const csv = toCsv(rows, [
@@ -47,6 +53,10 @@ export async function GET(request: Request) {
     "start_time",
     "end_time",
     "status",
+    "start_location",
+    "end_location",
+    "start_coords",
+    "end_coords",
   ]);
 
   return csvResponse(csv, `usage-records-${new Date().toISOString().slice(0, 10)}.csv`);

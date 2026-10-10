@@ -72,19 +72,6 @@ export default function AddFuelPanel({ vehicleId, tripId }: { vehicleId: string;
       </div>
 
       <div>
-        <label htmlFor="litres" className="mb-1 block text-sm font-medium text-ink">
-          Litres <span className="font-normal text-steel">(optional)</span>
-        </label>
-        <input
-          id="litres"
-          name="litres"
-          inputMode="decimal"
-          placeholder="e.g. 42.50"
-          className="w-full rounded-lg border border-steel/30 px-4 py-3 text-base focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
-        />
-      </div>
-
-      <div>
         <label className="mb-1 flex items-center gap-2 text-sm font-medium text-ink">
           <span className="rounded bg-ink px-2 py-1 text-xs text-paper">Photo of Receipt</span>
           {receiptName && <span className="text-xs text-track">{receiptName}</span>}

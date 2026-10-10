@@ -11,8 +11,27 @@ function urlBase64ToUint8Array(base64String: string) {
 
 type Status = "checking" | "unsupported" | "off" | "on" | "denied" | "working";
 
+/**
+ * The registered service worker, once it's actually running. register()
+ * resolves before the worker is active, and pushManager.subscribe() on a
+ * not-yet-active worker throws ("no active Service Worker"), which is why
+ * Turn on used to ask for permission and then silently flip back to off.
+ */
+async function readyRegistration(): Promise<ServiceWorkerRegistration> {
+  await navigator.serviceWorker.register("/sw.js");
+  return navigator.serviceWorker.ready;
+}
+
+function sameKey(sub: PushSubscription, key: Uint8Array): boolean {
+  const current = sub.options?.applicationServerKey;
+  if (!current) return true; // browser doesn't say; assume it matches
+  const a = new Uint8Array(current);
+  return a.length === key.length && a.every((b, i) => b === key[i]);
+}
+
 export default function PushSubscribeButton() {
   const [status, setStatus] = useState<Status>("checking");
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -24,40 +43,61 @@ export default function PushSubscribeButton() {
         setStatus("denied");
         return;
       }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const existing = await reg.pushManager.getSubscription();
-      setStatus(existing ? "on" : "off");
+      try {
+        const reg = await readyRegistration();
+        const existing = await reg.pushManager.getSubscription();
+        // "On" only if this device is subscribed AND permission is still granted.
+        setStatus(existing && Notification.permission === "granted" ? "on" : "off");
+      } catch {
+        setStatus("off");
+      }
     })();
   }, []);
 
   async function subscribe() {
     setStatus("working");
+    setMessage(null);
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setStatus(permission === "denied" ? "denied" : "off");
         return;
       }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      });
-      await fetch("/api/push/subscribe", {
+      const key = urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
+      const reg = await readyRegistration();
+
+      // A subscription made earlier with a different key can't be reused.
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && !sameKey(sub, key)) {
+        await sub.unsubscribe();
+        sub = null;
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      }
+
+      const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub),
       });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
       setStatus("on");
-    } catch {
+      setMessage("Notifications are on for this device.");
+    } catch (err) {
+      console.error("Push subscribe failed", err);
       setStatus("off");
+      setMessage(
+        "Couldn't turn notifications on. On iPhone, add Fleet Tracker to your Home Screen and open it from there first, then try again."
+      );
     }
   }
 
   async function unsubscribe() {
     setStatus("working");
+    setMessage(null);
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
+      const reg = await readyRegistration();
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
         await fetch("/api/push/subscribe", {
@@ -68,8 +108,10 @@ export default function PushSubscribeButton() {
         await sub.unsubscribe();
       }
       setStatus("off");
+      setMessage("Notifications are off for this device.");
     } catch {
       setStatus("on");
+      setMessage("Couldn't turn notifications off. Please try again.");
     }
   }
 
@@ -97,7 +139,10 @@ export default function PushSubscribeButton() {
           </p>
         </div>
         {status === "on" ? (
-          <button onClick={unsubscribe} className="flex-shrink-0 text-xs font-medium text-steel underline">
+          <button
+            onClick={unsubscribe}
+            className="flex-shrink-0 rounded-lg border border-ink px-3 py-1.5 text-xs font-semibold text-ink"
+          >
             Turn off
           </button>
         ) : (
@@ -110,6 +155,11 @@ export default function PushSubscribeButton() {
           </button>
         )}
       </div>
+      {message && (
+        <p role="status" className={`mt-2 text-xs ${status === "on" || message.includes("off for") ? "text-track" : "text-rust"}`}>
+          {message}
+        </p>
+      )}
     </div>
   );
 }

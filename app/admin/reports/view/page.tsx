@@ -3,6 +3,7 @@ import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import BackButton from "@/components/BackButton";
 import { getCurrentUser } from "@/lib/supabase/current";
 import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+import DownloadLink from "@/components/DownloadLink";
 
 export default async function ReportViewPage({
   searchParams,
@@ -33,7 +34,7 @@ export default async function ReportViewPage({
           .select("*, vehicle:vehicles(name)")
           .gte("created_at", nzLocalToDate(start).toISOString())
           .lt("created_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString())
-      : Promise.resolve({ data: null as { vehicle_id: string; vehicle: { name: string } | null; litres: number; cost: number }[] | null }),
+      : Promise.resolve({ data: null as { vehicle_id: string; vehicle: { name: string } | null; cost: number }[] | null }),
   ]);
 
   const rows = trips ?? [];
@@ -61,24 +62,19 @@ export default async function ReportViewPage({
   const driverRows = Object.values(byDriver).sort((a, b) => b.km - a.km);
   const vehicleRows = Object.values(byVehicle).sort((a, b) => b.km - a.km);
 
-  // Fuel-to-KM: litres/cost purchased in this period against KM driven in
-  // this same period, per vehicle. This is "fuel bought" not "fuel burned"
-  // — a fill-up near either edge of the date range can skew a single
-  // period, but it evens out over a few weeks/months, which is the level
-  // this is meant to be read at.
-  const fuelByVehicle: Record<string, { name: string; litres: number; cost: number; hasLitres: boolean }> = {};
+  // Fuel-to-KM: cost of fuel purchased in this period against KM driven in
+  // this same period, per vehicle. This is "fuel bought" not "fuel burned",
+  // so a fill-up near either edge of the date range can skew a single
+  // period, but it evens out over a few weeks or months.
+  const fuelByVehicle: Record<string, { name: string; cost: number; fills: number }> = {};
   (fuelLogs ?? []).forEach((f) => {
     const key = f.vehicle_id;
-    if (!fuelByVehicle[key]) fuelByVehicle[key] = { name: f.vehicle?.name ?? "Unknown", litres: 0, cost: 0, hasLitres: false };
-    if (f.litres != null) {
-      fuelByVehicle[key].litres += f.litres;
-      fuelByVehicle[key].hasLitres = true;
-    }
+    if (!fuelByVehicle[key]) fuelByVehicle[key] = { name: f.vehicle?.name ?? "Unknown", cost: 0, fills: 0 };
     fuelByVehicle[key].cost += f.cost;
+    fuelByVehicle[key].fills += 1;
   });
 
-  const fuelTotalLitres = (fuelLogs ?? []).reduce((s, f) => s + (f.litres ?? 0), 0);
-  const fuelHasAnyLitres = (fuelLogs ?? []).some((f) => f.litres != null);
+  const fuelFillCount = (fuelLogs ?? []).length;
   const fuelTotalCost = (fuelLogs ?? []).reduce((s, f) => s + f.cost, 0);
 
   const fuelVehicleRows = Object.entries(fuelByVehicle)
@@ -86,11 +82,9 @@ export default async function ReportViewPage({
       const km = byVehicle[vehicleId]?.km ?? 0;
       return {
         name: f.name,
-        litres: f.litres,
-        hasLitres: f.hasLitres,
         cost: f.cost,
+        fills: f.fills,
         km,
-        litresPer100km: km > 0 && f.hasLitres ? (f.litres / km) * 100 : null,
         costPerKm: km > 0 ? f.cost / km : null,
       };
     })
@@ -101,12 +95,9 @@ export default async function ReportViewPage({
       <BackButton label="Back to Reports" />
       <div className="mb-4 mt-2 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">{searchParams.label ?? `${start} to ${end}`}</h1>
-        <a
-          href={`/admin/reports/export?start=${start}&end=${end}`}
-          className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
-        >
+        <DownloadLink href={`/admin/reports/export?start=${start}&end=${end}`} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
           Export CSV
-        </a>
+        </DownloadLink>
       </div>
 
       <div className="mb-5 grid grid-cols-2 gap-3">
@@ -156,21 +147,15 @@ export default async function ReportViewPage({
         <>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-bold text-ink">Fuel</p>
-            <a
-              href={`/admin/fuel/export?start=${start}&end=${end}`}
-              className="text-xs font-medium text-brand underline"
-            >
+            <DownloadLink href={`/admin/fuel/export?start=${start}&end=${end}`} className="text-xs font-medium text-brand underline">
               Export Fuel CSV
-            </a>
+            </DownloadLink>
           </div>
 
           <div className="mb-3 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-steel/20 bg-white p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-steel">Litres Purchased</p>
-              <p className="odometer mt-1 text-2xl font-bold text-ink">
-                {fuelHasAnyLitres ? `${fuelTotalLitres.toFixed(1)} L` : "—"}
-              </p>
-              {!fuelHasAnyLitres && <p className="mt-0.5 text-[10px] text-steel">Not entered this period</p>}
+              <p className="text-xs font-medium uppercase tracking-wide text-steel">Fill-ups</p>
+              <p className="odometer mt-1 text-2xl font-bold text-ink">{fuelFillCount}</p>
             </div>
             <div className="rounded-xl border border-steel/20 bg-white p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-steel">Fuel Spend</p>
@@ -192,13 +177,11 @@ export default async function ReportViewPage({
                 </div>
                 <div className="mt-0.5 flex items-center justify-between text-xs text-steel">
                   <span>
-                    {f.hasLitres ? `${f.litres.toFixed(1)} L` : "No litres recorded"}
+                    {f.fills} fill-up{f.fills === 1 ? "" : "s"}
                     {f.km > 0 ? ` · ${f.km.toLocaleString("en-NZ")} KM driven` : ""}
                   </span>
                   <span>
-                    {f.litresPer100km !== null
-                      ? `${f.litresPer100km.toFixed(1)} L/100km · ${(f.costPerKm ?? 0).toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}/KM`
-                      : f.km > 0
+                    {f.km > 0
                         ? `${(f.costPerKm ?? 0).toLocaleString("en-NZ", { style: "currency", currency: "NZD" })}/KM`
                         : "No completed trips this period"}
                   </span>
@@ -208,7 +191,7 @@ export default async function ReportViewPage({
           </div>
 
           <p className="mt-2 text-xs text-steel">
-            Based on fuel purchased in this period against KM driven in this period — a fill-up right at the edge
+            Based on fuel purchased in this period against KM driven in this period. A fill-up right at the edge
             of the date range can skew a single week, but it settles out over a month.
           </p>
         </>
