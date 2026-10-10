@@ -3,6 +3,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { overallSeverity, wofStatus, regoStatus, rucStatus, serviceStatus, SEVERITY_BADGE_CLASS, SEVERITY_LABEL } from "@/lib/vehicleAlerts";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
+import { monthLabel } from "@/lib/receiptMonths";
 
 // recharts (plus its own dependency tree) is one of the heaviest packages
 // in this app and was previously bundled into every admin dashboard
@@ -32,12 +33,21 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
     { data: activeTrips },
     { data: completedTrips },
     { data: drivers },
+    { data: receiptsDue },
   ] = await Promise.all([
     supabase.from("notifications").select("*", { count: "exact", head: true }).eq("recipient_id", userId).eq("read", false),
     supabase.from("vehicles").select("*").eq("active", true),
     supabase.from("vehicle_usage").select("vehicle_id").eq("status", "active"),
     supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").in("status", ["completed", "corrected"]),
     supabase.from("profiles").select("id, name").eq("role", "driver"),
+    // Months the daily job has prompted for (migration 0022) that nobody
+    // has downloaded or emailed yet.
+    supabase
+      .from("receipt_exports")
+      .select("month, receipt_count")
+      .not("reminded_at", "is", null)
+      .is("exported_at", null)
+      .order("month", { ascending: false }),
   ]);
 
   const inUseCount = activeTrips?.length ?? 0;
@@ -98,6 +108,20 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
         >
           <span className="text-sm font-semibold text-brand">Add your first vehicle to get started</span>
           <span className="text-xs text-brand underline">Add Vehicle</span>
+        </Link>
+      )}
+
+      {receiptsDue && receiptsDue.length > 0 && (
+        <Link
+          href="/admin/fuel/receipts"
+          className="flex items-center justify-between rounded-xl border border-amber/40 bg-amber/10 p-3"
+        >
+          <span className="text-sm font-semibold text-ink">
+            {receiptsDue.length === 1
+              ? `${monthLabel(receiptsDue[0].month)} fuel receipts are ready to save`
+              : `${receiptsDue.length} months of fuel receipts are ready to save`}
+          </span>
+          <span className="text-xs text-ink underline">Download</span>
         </Link>
       )}
 

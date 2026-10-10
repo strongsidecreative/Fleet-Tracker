@@ -17,6 +17,7 @@ const TITLES: Record<string, string> = {
   booking_approved: "Booking Approved",
   booking_declined: "Booking Declined",
   booking_override: "Booking Override",
+  receipt_export_due: "Monthly Fuel Receipts",
 };
 
 // Where tapping the push notification should take the recipient.
@@ -31,6 +32,7 @@ const URLS: Record<string, string> = {
   booking_approved: DRIVER_URL,
   booking_declined: DRIVER_URL,
   booking_override: DRIVER_URL,
+  receipt_export_due: "/admin/fuel/receipts",
 };
 
 export async function POST(req: NextRequest) {

@@ -29,12 +29,17 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">Fuel</h1>
+        <div className="flex gap-2">
+        <a href="/admin/fuel/receipts" className="rounded-lg border border-ink px-3 py-2 text-xs font-semibold text-ink">
+          Monthly Receipts
+        </a>
         <a
           href={`/admin/fuel/export${searchParams.vehicleId ? `?vehicleId=${searchParams.vehicleId}` : ""}`}
           className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper"
         >
           Export CSV
         </a>
+        </div>
       </div>
 
       <p className="mb-4 text-xs text-steel">

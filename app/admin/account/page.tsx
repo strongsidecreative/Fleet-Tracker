@@ -5,6 +5,8 @@ import { RestartTourButton } from "@/components/tour/TourLauncher";
 import { adminTourSteps } from "@/components/tour/tourSteps";
 import OrganisationCard from "./OrganisationCard";
 import FeatureTogglesCard from "./FeatureTogglesCard";
+import ReceiptSettingsCard from "./ReceiptSettingsCard";
+import { isEmailConfigured } from "@/lib/email";
 import { normaliseFeatures } from "@/lib/orgFeatures";
 import { getCurrentUser } from "@/lib/supabase/current";
 
@@ -14,7 +16,7 @@ export default async function AdminAccountPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, email, role, organisation:organisations(name, features)")
+    .select("name, email, role, organisation:organisations(name, features, receipt_delivery, receipt_retention_months)")
     .eq("id", user!.id)
     .single();
 
@@ -26,7 +28,10 @@ export default async function AdminAccountPage() {
   const organisationRaw = profile?.organisation as unknown;
   const organisation = Array.isArray(organisationRaw)
     ? organisationRaw[0]
-    : (organisationRaw as { name?: string; features?: unknown } | null | undefined);
+    : (organisationRaw as
+        | { name?: string; features?: unknown; receipt_delivery?: "remind" | "email"; receipt_retention_months?: number }
+        | null
+        | undefined);
   const organisationName = organisation?.name;
   const features = normaliseFeatures(organisation?.features);
 
@@ -45,6 +50,16 @@ export default async function AdminAccountPage() {
       <div className="mb-4 max-w-sm">
         <FeatureTogglesCard features={features} />
       </div>
+
+      {features.fuel_tracking && (
+        <div className="mb-4 max-w-sm">
+          <ReceiptSettingsCard
+            delivery={organisation?.receipt_delivery ?? "remind"}
+            retention={organisation?.receipt_retention_months ?? 3}
+            emailAvailable={isEmailConfigured()}
+          />
+        </div>
+      )}
 
       <div className="max-w-sm space-y-3 rounded-xl border border-steel/20 bg-white p-4">
         <div>
