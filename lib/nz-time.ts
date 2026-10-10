@@ -51,22 +51,91 @@ function nzDateParts(date: Date) {
 
 const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-/** Midnight (NZ time) of the Monday starting the week containing `date`. */
-export function startOfWeekNZ(date: Date = new Date()) {
+/**
+ * Offset (ms) of NZ local time from UTC at a given instant: +13h in
+ * summer (NZDT), +12h in winter (NZST).
+ */
+function nzOffsetMs(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-NZ", {
+    timeZone: NZ_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/**
+ * The real instant for a wall-clock date + time typed in NZ, e.g.
+ * nzLocalToDate("2026-10-12", "09:00") is 9am in Auckland, whatever
+ * timezone the server or browser runs in. Vercel runs in UTC, so
+ * `new Date("2026-10-12T09:00")` there means 9am UTC (10pm NZ) — never
+ * parse a form's date/time that way.
+ */
+export function nzLocalToDate(date: string, time = "00:00"): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  const wall = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
+  let instant = new Date(wall - nzOffsetMs(new Date(wall)));
+  // Second pass settles the hour either side of a daylight-saving change.
+  instant = new Date(wall - nzOffsetMs(instant));
+  return instant;
+}
+
+/** YYYY-MM-DD plus a whole number of days (calendar arithmetic, no timezone). */
+export function addDaysToDateString(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** ISO bounds for an inclusive NZ date range: [start 00:00 NZ, day after end 00:00 NZ). */
+export function nzRangeIso(start: string, end: string): { fromIso: string; toIso: string } {
+  return {
+    fromIso: nzLocalToDate(start).toISOString(),
+    toIso: nzLocalToDate(addDaysToDateString(end, 1)).toISOString(),
+  };
+}
+
+/** YYYY-MM-DD of the Monday starting the NZ week containing `date`. */
+export function startOfWeekNZDateString(date: Date = new Date()): string {
   const { year, month, day, weekday } = nzDateParts(date);
   const dayIndex = WEEKDAY_INDEX[weekday!] ?? 1;
   const diff = dayIndex === 0 ? -6 : 1 - dayIndex;
-  // Construct as a UTC instant representing that NZ calendar date at midnight,
-  // then let display formatting handle the actual NZ offset.
-  const base = new Date(Date.UTC(year, month - 1, day));
-  base.setUTCDate(base.getUTCDate() + diff);
-  return base;
+  return new Date(Date.UTC(year, month - 1, day + diff)).toISOString().slice(0, 10);
 }
 
-/** Midnight (NZ time) of the 1st of the month containing `date`. */
+/** Midnight (NZ time) of the Monday starting the week containing `date`, as a real instant. */
+export function startOfWeekNZ(date: Date = new Date()) {
+  return nzLocalToDate(startOfWeekNZDateString(date));
+}
+
+/** Midnight (NZ time) of the 1st of the month containing `date`, as a real instant. */
 export function startOfMonthNZ(date: Date = new Date()) {
   const { year, month } = nzDateParts(date);
-  return new Date(Date.UTC(year, month - 1, 1));
+  return nzLocalToDate(`${year}-${String(month).padStart(2, "0")}-01`);
+}
+
+/** The NZ calendar date of an instant, as YYYY-MM-DD (for <input type="date">). */
+export function nzDateInputValue(date: string | Date): string {
+  return nzDateString(new Date(date));
+}
+
+/** The NZ wall-clock time of an instant, as HH:MM (for <input type="time">). */
+export function nzTimeInputValue(date: string | Date): string {
+  const parts = new Intl.DateTimeFormat("en-NZ", {
+    timeZone: NZ_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(date));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("hour")}:${get("minute")}`;
 }
 
 function nzDateString(date: Date): string {

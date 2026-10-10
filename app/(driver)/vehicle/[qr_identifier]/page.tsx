@@ -6,6 +6,37 @@ import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 import { getCurrentUser } from "@/lib/supabase/current";
 
+type Reservation = { id: string; driver_id: string; end_datetime: string; driver: { name: string | null } | null };
+
+async function getCurrentReservation(
+  supabase: ReturnType<typeof createClient>,
+  vehicleId: string,
+  nowIso: string
+): Promise<{ data: Reservation | null }> {
+  const { data, error } = await supabase.rpc("current_vehicle_reservation", { p_vehicle_id: vehicleId });
+  if (!error) {
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { id: string; driver_id: string; driver_name: string | null; end_datetime: string }
+      | undefined;
+    return {
+      data: row ? { id: row.id, driver_id: row.driver_id, end_datetime: row.end_datetime, driver: { name: row.driver_name } } : null,
+    };
+  }
+  // Function not deployed yet: fall back to the old direct query (only
+  // sees the viewer's own bookings, or all of them for an admin).
+  const { data: own } = await supabase
+    .from("bookings")
+    .select("id, driver_id, end_datetime, driver:profiles(name)")
+    .eq("vehicle_id", vehicleId)
+    .eq("approval_status", "approved")
+    .in("booking_status", ["upcoming", "active"])
+    .lte("start_datetime", nowIso)
+    .gte("end_datetime", nowIso)
+    .limit(1)
+    .maybeSingle();
+  return { data: (own as unknown as Reservation | null) ?? null };
+}
+
 export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
   const supabase = createClient();
 
@@ -61,16 +92,11 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
       .neq("vehicle_id", vehicle.id)
       .maybeSingle(),
     // Only an APPROVED booking reserves the vehicle — a pending request
-    // never blocks anyone, per the approval workflow.
-    supabase
-      .from("bookings")
-      .select("*, driver:profiles(name)")
-      .eq("vehicle_id", vehicle.id)
-      .eq("approval_status", "approved")
-      .in("booking_status", ["upcoming", "active"])
-      .lte("start_datetime", nowIso)
-      .gte("end_datetime", nowIso)
-      .maybeSingle(),
+    // never blocks anyone, per the approval workflow. Read through a
+    // database function (migration 0021) because RLS only lets a driver
+    // see their OWN bookings, so a plain query never saw another
+    // driver's reservation.
+    getCurrentReservation(supabase, vehicle.id, nowIso),
     // Fetched unconditionally alongside everything else (cheap, and its
     // own result isn't needed to decide whether to run it) — only used
     // below if this org actually has Vehicle Checks turned on.

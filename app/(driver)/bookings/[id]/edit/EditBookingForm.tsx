@@ -3,6 +3,7 @@
 import { useFormState, useFormStatus } from "react-dom";
 import { useState } from "react";
 import { editBooking } from "../../actions";
+import { nzDateInputValue, nzTimeInputValue } from "@/lib/nz-time";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -21,10 +22,11 @@ export default function EditBookingForm({ booking, vehicles }: { booking: any; v
   const boundAction = editBooking.bind(null, booking.id);
   const [state, formAction] = useFormState(boundAction, { error: null });
 
-  const start = new Date(booking.start_datetime);
-  const end = new Date(booking.end_datetime);
-  const toDateInput = (d: Date) => d.toISOString().slice(0, 10);
-  const toTimeInput = (d: Date) => d.toTimeString().slice(0, 5);
+  // Shown in NZ time, the same zone the server parses them back in.
+  const start = booking.start_datetime as string;
+  const end = booking.end_datetime as string;
+  const toDateInput = nzDateInputValue;
+  const toTimeInput = nzTimeInputValue;
 
   const [vehicleId, setVehicleId] = useState(booking.vehicle_id ?? "");
   const [vehicleRequired, setVehicleRequired] = useState(booking.vehicle_required);

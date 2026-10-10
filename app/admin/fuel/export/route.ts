@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,8 +14,8 @@ export async function GET(request: Request) {
     .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
     .order("created_at", { ascending: false });
 
-  if (start) query = query.gte("created_at", `${start}T00:00:00`);
-  if (end) query = query.lte("created_at", `${end}T23:59:59`);
+  if (start) query = query.gte("created_at", nzLocalToDate(start).toISOString());
+  if (end) query = query.lt("created_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString());
   if (vehicleId) query = query.eq("vehicle_id", vehicleId);
 
   const { data: logs } = await query;

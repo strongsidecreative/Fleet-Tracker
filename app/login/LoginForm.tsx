@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginForm() {
+export default function LoginForm({ next = null }: { next?: string | null }) {
   const searchParams = useSearchParams();
   const justSetUp = searchParams.get("setup") === "success";
   const serverError = searchParams.get("error") === "server";
@@ -38,7 +38,11 @@ export default function LoginForm() {
     // rendered the destination on the server twice back to back, which is
     // a big part of why admin sign-in felt slow. A single hard navigation
     // also guarantees the new session cookies are what the server sees.
-    window.location.replace(profile?.role === "admin" ? "/admin" : "/");
+    // Back to the page they were trying to open (e.g. a scanned vehicle),
+    // unless it's an admin page and they're a driver.
+    const isAdmin = profile?.role === "admin";
+    const destination = next && (isAdmin || !next.startsWith("/admin")) ? next : isAdmin ? "/admin" : "/";
+    window.location.replace(destination);
   }
 
   return (

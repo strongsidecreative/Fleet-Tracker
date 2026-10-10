@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useMemo, useState } from "react";
 import { createBookingRequest } from "../actions";
 import { generateOccurrenceDates, dayLabel, type RecurrencePattern } from "@/lib/bookingRecurrence";
+import { nzToday } from "@/lib/nz-time";
 
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
@@ -129,7 +130,7 @@ export default function NewBookingForm({
           name="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          min={new Date().toISOString().slice(0, 10)}
+          min={nzToday()}
           required
           className="w-full rounded-lg border border-steel/30 px-4 py-3 text-base focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
         />

@@ -9,7 +9,7 @@ export default async function MyTripsPage() {
     .from("vehicle_usage")
     .select("*, vehicle:vehicles(name)")
     .eq("driver_id", user!.id)
-    .eq("status", "completed")
+    .in("status", ["completed", "corrected"])
     .order("start_datetime", { ascending: false });
 
   return (

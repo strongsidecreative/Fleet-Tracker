@@ -8,12 +8,68 @@ import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
 import { driverHasHistory } from "./history";
 
+/**
+ * Deactivate / reactivate an admin from the People list. Deactivating
+ * now also blocks the login itself (a ban, lifted again on reactivate),
+ * not just the profiles flag, and is_admin() (migration 0021) ignores
+ * inactive admins, so a still-open session can't keep using admin
+ * rights. Refuses to deactivate yourself or the organisation's last
+ * active admin, so nobody can lock their organisation out by accident.
+ */
 export async function toggleUserActive(userId: string, newActive: boolean) {
+  const back = (kind: "success" | "error", msg: string) =>
+    redirect(`/admin/people?role=admin&${kind}=${encodeURIComponent(msg)}`);
+
   const supabase = createClient();
-  await supabase.from("profiles").update({ active: newActive }).eq("id", userId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: caller } = await supabase
+    .from("profiles")
+    .select("role, organisation_id")
+    .eq("id", user!.id)
+    .single();
+  if (caller?.role !== "admin") back("error", "You're not authorised to do that.");
+
+  if (!newActive && userId === user!.id) back("error", "You can't deactivate your own account.");
+
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("role, organisation_id")
+    .eq("id", userId)
+    .single();
+  if (!target || target.organisation_id !== caller!.organisation_id) back("error", "You're not authorised to do that.");
+
+  if (!newActive && target!.role === "admin") {
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("organisation_id", caller!.organisation_id)
+      .eq("role", "admin")
+      .eq("active", true)
+      .neq("id", userId);
+    if (!count) back("error", "That's the last active admin. Add or reactivate another admin first.");
+  }
+
+  const { data: changed, error } = await supabase
+    .from("profiles")
+    .update({ active: newActive })
+    .eq("id", userId)
+    .select("id");
+  if (error || !changed || changed.length === 0) back("error", "Something went wrong saving that change. Please try again.");
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await createAdminClient().auth.admin.updateUserById(userId, {
+      ban_duration: newActive ? "none" : "87600h",
+    });
+  }
+
   revalidatePath("/admin/drivers");
   revalidatePath("/admin/admins");
   revalidatePath("/admin/people");
+  back("success", newActive ? "Reactivated." : "Deactivated. They can no longer sign in.");
 }
 
 /**

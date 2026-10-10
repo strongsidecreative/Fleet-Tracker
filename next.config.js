@@ -11,6 +11,13 @@ const nextConfig = {
     staleTimes: {
       dynamic: 30,
     },
+    // Photos are shrunk in the browser first (lib/shrinkImage.ts), so a
+    // normal upload is well under this. 4 MB is the backstop (Vercel's
+    // own hard limit is 4.5 MB); the 1 MB default rejected every
+    // full-size phone photo outright.
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
   },
 };
 

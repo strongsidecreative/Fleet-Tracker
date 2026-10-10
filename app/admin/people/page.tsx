@@ -120,7 +120,7 @@ export default async function AdminPeoplePage({
     // Only the columns the KM totals below actually use — this table grows
     // without bound over time, and previously pulled every column plus a
     // vehicle-name join for every completed trip ever, just to sum numbers.
-    supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").eq("status", "completed"),
+    supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").in("status", ["completed", "corrected"]),
     supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "active"),
     supabase.from("driver_licences").select("*"),
     pendingIdsPromise,

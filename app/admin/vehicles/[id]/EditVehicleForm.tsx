@@ -1,5 +1,6 @@
 "use client";
 
+import { shrinkImageInput } from "@/lib/shrinkImage";
 import { useFormState, useFormStatus } from "react-dom";
 import { useState } from "react";
 import { updateVehicle } from "../actions";
@@ -41,9 +42,59 @@ export default function EditVehicleForm({ vehicle }: { vehicle: any }) {
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) setPreview(URL.createObjectURL(file));
+            void shrinkImageInput(e.currentTarget);
           }}
           className="w-full text-xs text-steel file:mr-3 file:rounded-lg file:border-0 file:bg-ink file:px-3 file:py-2 file:text-xs file:font-semibold file:text-paper"
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="name" className="mb-1 block text-xs font-medium text-steel">
+            Name
+          </label>
+          <input
+            id="name"
+            name="name"
+            defaultValue={vehicle.name}
+            required
+            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="registration" className="mb-1 block text-xs font-medium text-steel">
+            Registration
+          </label>
+          <input
+            id="registration"
+            name="registration"
+            defaultValue={vehicle.registration}
+            required
+            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="make" className="mb-1 block text-xs font-medium text-steel">
+            Make
+          </label>
+          <input
+            id="make"
+            name="make"
+            defaultValue={vehicle.make ?? ""}
+            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="model" className="mb-1 block text-xs font-medium text-steel">
+            Model
+          </label>
+          <input
+            id="model"
+            name="model"
+            defaultValue={vehicle.model ?? ""}
+            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
+          />
+        </div>
       </div>
 
       <div>

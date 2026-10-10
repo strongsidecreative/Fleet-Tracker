@@ -14,7 +14,7 @@ export default async function DriverDetailPage({ params }: { params: { id: strin
       .from("vehicle_usage")
       .select("*, vehicle:vehicles(name)")
       .eq("driver_id", params.id)
-      .eq("status", "completed")
+      .in("status", ["completed", "corrected"])
       .order("start_datetime", { ascending: false }),
   ]);
 

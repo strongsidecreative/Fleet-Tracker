@@ -18,7 +18,7 @@ export default async function DriverDashboard({
   // Everything in one parallel batch (previously profile first, then the
   // rest): the profile is shared with the layout via React cache, and the
   // admin redirect below only needs it after the fact.
-  const [profile, { data: activeTrip }, { data: completedTrips }, features] = await Promise.all([
+  const [profile, { data: activeTrip }, { data: completedTrips }, { data: recentTrips }, features] = await Promise.all([
     getMyProfile(),
     supabase
       .from("vehicle_usage")
@@ -26,12 +26,21 @@ export default async function DriverDashboard({
       .eq("driver_id", user!.id)
       .eq("status", "active")
       .maybeSingle(),
+    // Two light columns for the KM totals (every finished trip), and the
+    // full rows only for the five shown in "Recent", instead of loading
+    // every trip with its vehicle on every visit.
+    supabase
+      .from("vehicle_usage")
+      .select("start_datetime, kilometres_used")
+      .eq("driver_id", user!.id)
+      .in("status", ["completed", "corrected"]),
     supabase
       .from("vehicle_usage")
       .select("*, vehicle:vehicles(name)")
       .eq("driver_id", user!.id)
-      .eq("status", "completed")
-      .order("start_datetime", { ascending: false }),
+      .in("status", ["completed", "corrected"])
+      .order("start_datetime", { ascending: false })
+      .limit(5),
     // Vehicle Check / Report an Incident below are only shown when this
     // organisation's admin hasn't switched them off — middleware.ts is
     // what actually blocks the pages if someone still has an old link.
@@ -55,7 +64,7 @@ export default async function DriverDashboard({
   const weekKm = weekTrips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
   const monthKm = monthTrips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
   const totalKm = trips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
-  const recent = trips.slice(0, 5);
+  const recent = recentTrips ?? [];
 
   return (
     <div className="space-y-5">

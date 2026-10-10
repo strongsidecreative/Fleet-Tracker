@@ -36,7 +36,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
     supabase.from("notifications").select("*", { count: "exact", head: true }).eq("recipient_id", userId).eq("read", false),
     supabase.from("vehicles").select("*").eq("active", true),
     supabase.from("vehicle_usage").select("vehicle_id").eq("status", "active"),
-    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "completed"),
+    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").in("status", ["completed", "corrected"]),
     supabase.from("profiles").select("id, name").eq("role", "driver"),
   ]);
 

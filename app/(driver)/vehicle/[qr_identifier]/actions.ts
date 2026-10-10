@@ -68,6 +68,7 @@ export async function startTrip(
     // written to be human-readable (odometer check, booking lock).
     // Constraint violations fall back to a generic friendly message.
     if (error.message.includes("Starting KM")) return { error: error.message };
+    if (error.message.includes("could not be found")) return { error: "That vehicle couldn't be found. Please scan it again." };
     if (error.message.includes("booked by another driver")) return { error: error.message };
     if (error.code === "23505") {
       return { error: "This vehicle just became unavailable, or you already have a trip active. Please refresh and try again." };
@@ -102,7 +103,7 @@ export async function finishTrip(
     return { error: "Please enter the kilometre reading shown on the vehicle." };
   }
 
-  const { error } = await supabase
+  const { data: finished, error } = await supabase
     .from("vehicle_usage")
     .update({
       end_km: km,
@@ -111,7 +112,12 @@ export async function finishTrip(
     })
     .eq("id", tripId)
     .eq("driver_id", user.id)
-    .eq("status", "active");
+    .eq("status", "active")
+    .select("id");
+
+  if (!error && (!finished || finished.length === 0)) {
+    return { error: "This trip has already been finished (an admin may have closed it). Refresh to see the latest." };
+  }
 
   if (error) {
     if (error.message.includes("end_km_not_below_start")) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { shrinkImageInput } from "@/lib/shrinkImage";
 import { useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { logFuel } from "./actions";
@@ -94,7 +95,10 @@ export default function AddFuelPanel({ vehicleId, tripId }: { vehicleId: string;
           accept="image/*"
           capture="environment"
           required
-          onChange={(e) => setReceiptName(e.target.files?.[0]?.name ?? null)}
+          onChange={(e) => {
+            setReceiptName(e.target.files?.[0]?.name ?? null);
+            void shrinkImageInput(e.currentTarget);
+          }}
           className="w-full text-xs text-steel"
         />
       </div>

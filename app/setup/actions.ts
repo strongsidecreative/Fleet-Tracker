@@ -89,8 +89,12 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
   });
 
   if (profileError) {
+    // Undo both halves so the same email and org name can simply be tried
+    // again, instead of leaving a login with no profile behind.
+    await adminClient.auth.admin.deleteUser(created.user.id);
+    await adminClient.from("organisations").delete().eq("id", org.id);
     return {
-      error: "The account was created, but setting up the admin profile failed. Please contact support.",
+      error: "Something went wrong setting up the admin account. Nothing was saved, so please try again.",
     };
   }
 

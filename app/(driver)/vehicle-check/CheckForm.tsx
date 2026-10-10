@@ -1,5 +1,6 @@
 "use client";
 
+import { shrinkImageInput } from "@/lib/shrinkImage";
 import { useFormState, useFormStatus } from "react-dom";
 import { useState } from "react";
 import { submitVehicleCheck } from "./actions";
@@ -156,7 +157,11 @@ export default function CheckForm({
                       type="file"
                       name={`photo_${item.key}`}
                       accept="image/*"
-                      onChange={(e) => updateItem(item.key, { photoName: e.target.files?.[0]?.name ?? null })}
+                      onChange={(e) => {
+                        updateItem(item.key, { photoName: e.target.files?.[0]?.name ?? null });
+                        // Smaller than other uploads: a check can carry several photos in one request.
+                        void shrinkImageInput(e.currentTarget, 1280, 0.72);
+                      }}
                       className="w-full text-xs text-steel"
                     />
                   </div>

@@ -55,6 +55,14 @@ export async function createVehicle(prevState: ActionState, formData: FormData):
 export async function updateVehicle(vehicleId: string, prevState: ActionState, formData: FormData): Promise<ActionState> {
   const supabase = createClient();
 
+  const name = (formData.get("name") as string | null)?.trim();
+  const registration = (formData.get("registration") as string | null)?.trim();
+  const make = (formData.get("make") as string | null)?.trim() || null;
+  const model = (formData.get("model") as string | null)?.trim() || null;
+  if (name === "" || registration === "") {
+    return { error: "Name and registration can't be empty." };
+  }
+
   const wofDue = (formData.get("wofDue") as string) || null;
   const regoDue = (formData.get("regoDue") as string) || null;
   const rucRaw = formData.get("ruc") as string;
@@ -72,8 +80,8 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
     if (!photo.type.startsWith("image/")) {
       return { error: "Please upload an image file for the vehicle photo." };
     }
-    if (photo.size > 5 * 1024 * 1024) {
-      return { error: "Photo is too large — please use an image under 5MB." };
+    if (photo.size > 4 * 1024 * 1024) {
+      return { error: "Photo is too large. Please use an image under 4MB." };
     }
 
     const ext = photo.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
@@ -90,9 +98,13 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
     photoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
   }
 
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("vehicles")
     .update({
+      ...(name ? { name } : {}),
+      ...(registration ? { registration } : {}),
+      ...(formData.has("make") ? { make } : {}),
+      ...(formData.has("model") ? { model } : {}),
       wof_due: wofDue,
       rego_due: regoDue,
       ruc_purchased_to_km: rucRaw ? Number(rucRaw) : null,
@@ -105,9 +117,10 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
       ...(photoUrl ? { photo_url: photoUrl } : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", vehicleId);
+    .eq("id", vehicleId)
+    .select("id");
 
-  if (error) {
+  if (error || !saved || saved.length === 0) {
     return { error: "Something went wrong saving these changes. Please try again." };
   }
 

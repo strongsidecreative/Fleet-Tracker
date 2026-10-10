@@ -17,9 +17,13 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
   const { data: logs } = await query;
   const rows = logs ?? [];
 
-  const totalLitres = rows.reduce((s, l) => s + l.litres, 0);
+  const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
   const totalCost = rows.reduce((s, l) => s + l.cost, 0);
-  const avgPricePerLitre = totalLitres > 0 ? totalCost / totalLitres : 0;
+  // Litres is optional, so $/L only uses fill-ups that recorded litres;
+  // dividing ALL cost by only SOME litres overstated the price.
+  const withLitres = rows.filter((l) => l.litres != null && l.litres > 0);
+  const costWithLitres = withLitres.reduce((s, l) => s + l.cost, 0);
+  const avgPricePerLitre = totalLitres > 0 ? costWithLitres / totalLitres : 0;
 
   return (
     <div>

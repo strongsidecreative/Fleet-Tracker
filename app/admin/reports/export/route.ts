@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -14,9 +15,9 @@ export async function GET(request: Request) {
   const { data: trips } = await supabase
     .from("vehicle_usage")
     .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
-    .eq("status", "completed")
-    .gte("start_datetime", `${start}T00:00:00`)
-    .lte("start_datetime", `${end}T23:59:59`)
+    .in("status", ["completed", "corrected"])
+    .gte("start_datetime", nzLocalToDate(start).toISOString())
+    .lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString())
     .order("start_datetime", { ascending: false });
 
   const rows = (trips ?? []).map((t) => ({

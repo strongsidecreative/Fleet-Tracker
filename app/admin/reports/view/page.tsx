@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import BackButton from "@/components/BackButton";
 import { getCurrentUser } from "@/lib/supabase/current";
+import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 
 export default async function ReportViewPage({
   searchParams,
@@ -23,15 +24,15 @@ export default async function ReportViewPage({
     supabase
       .from("vehicle_usage")
       .select("*, vehicle:vehicles(name), driver:profiles(name)")
-      .eq("status", "completed")
-      .gte("start_datetime", `${start}T00:00:00`)
-      .lte("start_datetime", `${end}T23:59:59`),
+      .in("status", ["completed", "corrected"])
+      .gte("start_datetime", nzLocalToDate(start).toISOString())
+      .lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString()),
     features.fuel_tracking
       ? supabase
           .from("fuel_logs")
           .select("*, vehicle:vehicles(name)")
-          .gte("created_at", `${start}T00:00:00`)
-          .lte("created_at", `${end}T23:59:59`)
+          .gte("created_at", nzLocalToDate(start).toISOString())
+          .lt("created_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString())
       : Promise.resolve({ data: null as { vehicle_id: string; vehicle: { name: string } | null; litres: number; cost: number }[] | null }),
   ]);
 

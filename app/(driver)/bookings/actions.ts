@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { generateOccurrenceDates, type RecurrencePattern } from "@/lib/bookingRecurrence";
+import { nzLocalToDate } from "@/lib/nz-time";
 
 type ActionState = { error: string | null };
 
@@ -33,8 +34,10 @@ export async function createBookingRequest(prevState: ActionState, formData: For
     return { error: "Please select an admin to approve this request." };
   }
 
-  const firstStart = new Date(`${date}T${startTime}`);
-  const firstEnd = new Date(`${date}T${endTime}`);
+  // Times are typed in NZ time; the server runs in UTC, so parse them
+  // explicitly as Pacific/Auckland (see nzLocalToDate).
+  const firstStart = nzLocalToDate(date, startTime);
+  const firstEnd = nzLocalToDate(date, endTime);
   if (firstEnd <= firstStart) {
     return { error: "End time must be after the start time." };
   }
@@ -88,8 +91,8 @@ export async function createBookingRequest(prevState: ActionState, formData: For
     vehicle_required: vehicleRequired,
     driver_id: user!.id,
     created_by: user!.id,
-    start_datetime: new Date(`${occDate}T${startTime}`).toISOString(),
-    end_datetime: new Date(`${occDate}T${endTime}`).toISOString(),
+    start_datetime: nzLocalToDate(occDate, startTime).toISOString(),
+    end_datetime: nzLocalToDate(occDate, endTime).toISOString(),
     notes,
     approval_status: "pending",
     booking_status: "upcoming",
@@ -129,18 +132,19 @@ export async function editBooking(bookingId: string, prevState: ActionState, for
   if (!vehicleId && !vehicleRequired) return { error: "Please choose a vehicle, or mark it as To Be Assigned." };
   if (!date || !startTime || !endTime) return { error: "Please fill in the date and start/end times." };
 
-  const newStart = new Date(`${date}T${startTime}`);
-  const newEnd = new Date(`${date}T${endTime}`);
+  const newStart = nzLocalToDate(date, startTime);
+  const newEnd = nzLocalToDate(date, endTime);
   if (newEnd <= newStart) return { error: "End time must be after the start time." };
+  if (newEnd < new Date()) return { error: "That time has already passed. Please choose a future date." };
 
   const materialChange =
     vehicleId !== booking.vehicle_id ||
-    newStart.toISOString() !== booking.start_datetime ||
-    newEnd.toISOString() !== booking.end_datetime;
+    newStart.getTime() !== new Date(booking.start_datetime).getTime() ||
+    newEnd.getTime() !== new Date(booking.end_datetime).getTime();
 
   const wasApproved = booking.approval_status === "approved";
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("bookings")
     .update({
       title,
@@ -154,7 +158,12 @@ export async function editBooking(bookingId: string, prevState: ActionState, for
         : {}),
     })
     .eq("id", bookingId)
-    .eq("driver_id", user!.id);
+    .eq("driver_id", user!.id)
+    .select("id");
+
+  if (!error && (!updated || updated.length === 0)) {
+    return { error: "This booking couldn't be updated. It may have just been changed by an admin. Please refresh and try again." };
+  }
 
   if (error) {
     if (error.code === "23P01") {
@@ -174,26 +183,28 @@ export async function cancelBooking(bookingId: string, scope: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: booking } = await supabase.from("bookings").select("*").eq("id", bookingId).single();
-  if (!booking || booking.driver_id !== user!.id) return;
-
-  if (scope === "this" || !booking.series_id) {
-    await supabase.from("bookings").update({ booking_status: "cancelled" }).eq("id", bookingId).eq("driver_id", user!.id);
-  } else if (scope === "future") {
-    await supabase
-      .from("bookings")
-      .update({ booking_status: "cancelled" })
-      .eq("series_id", booking.series_id)
-      .eq("driver_id", user!.id)
-      .gte("start_datetime", booking.start_datetime);
-  } else if (scope === "series") {
-    await supabase
-      .from("bookings")
-      .update({ booking_status: "cancelled" })
-      .eq("series_id", booking.series_id)
-      .eq("driver_id", user!.id);
+  if (!booking || booking.driver_id !== user!.id) {
+    redirect(`/bookings?error=${encodeURIComponent("That booking couldn't be found.")}`);
   }
 
+  let query = supabase.from("bookings").update({ booking_status: "cancelled" }).eq("driver_id", user!.id);
+  if (scope === "this" || !booking.series_id) {
+    query = query.eq("id", bookingId);
+  } else if (scope === "future") {
+    query = query.eq("series_id", booking.series_id).gte("start_datetime", booking.start_datetime);
+  } else {
+    query = query.eq("series_id", booking.series_id);
+  }
+
+  // RLS turns a blocked update into "0 rows, no error", so check rows came back.
+  const { data: cancelled, error } = await query.select("id");
+
   revalidatePath("/bookings");
+  if (error || !cancelled || cancelled.length === 0) {
+    redirect(`/bookings?error=${encodeURIComponent("Something went wrong cancelling this booking. Please try again.")}`);
+  }
+  redirect(`/bookings?success=${encodeURIComponent(cancelled.length > 1 ? `${cancelled.length} bookings cancelled` : "Booking cancelled")}`);
 }

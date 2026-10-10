@@ -43,7 +43,10 @@ async function inviteAndCreateProfile(
   });
 
   if (profileError) {
-    return { error: "The invite was sent, but creating the profile failed. Please contact support." };
+    // Remove the half-created login so this email can be invited again.
+    // (The invite email already sent will just stop working.)
+    await adminClient.auth.admin.deleteUser(invited.user.id);
+    return { error: "Something went wrong creating this person's profile. Nothing was saved, so please try again." };
   }
 
   return { error: null };
@@ -88,7 +91,7 @@ export async function createUser(role: "driver" | "admin", prevState: ActionStat
   }
 
   const name = (formData.get("name") as string)?.trim();
-  const email = (formData.get("email") as string)?.trim();
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
 
   if (!name || !email) {
     return { error: "Name and email are both required." };

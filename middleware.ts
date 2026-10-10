@@ -143,6 +143,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Signed in and past every check: the saved "where they were headed"
+  // path (see above) has done its job, so clear it rather than letting a
+  // stale one hijack some later sign-in.
+  if (user && request.cookies.get("redirect_after_login")) {
+    response.cookies.set("redirect_after_login", "", { maxAge: 0, path: "/" });
+  }
+
   return response;
 }
 

@@ -3,14 +3,15 @@ import Link from "next/link";
 import { cancelBooking } from "./actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import SuccessBanner from "@/components/SuccessBanner";
+import ErrorBanner from "@/components/ErrorBanner";
+import { isTodayNZ } from "@/lib/nz-time";
 import { getCurrentUser } from "@/lib/supabase/current";
 
 function fmtRange(start: string, end: string) {
   const s = new Date(start);
   const e = new Date(end);
-  const today = new Date();
   const dayLabel =
-    s.toDateString() === today.toDateString()
+    isTodayNZ(s)
       ? "Today"
       : s.toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short" });
   return `${dayLabel} ${s.toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}`;
@@ -108,6 +109,7 @@ export default async function DriverBookingsPage() {
   return (
     <div>
       <SuccessBanner />
+      <ErrorBanner />
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-ink">My Bookings</h1>
         <Link href="/bookings/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">

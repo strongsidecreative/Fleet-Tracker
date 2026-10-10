@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { notifyDriver } from "@/lib/bookingNotify";
 
 type Conflict = { date: string; vehicleName: string; requestedTime: string; existingTime: string; existingDriver: string };
 type ActionState = { error: string | null; conflicts?: Conflict[] };
@@ -90,13 +91,12 @@ export async function approveBooking(bookingId: string, prevState: ActionState, 
     return { error: "Something went wrong approving this booking. Please try again." };
   }
 
-  await supabase.from("notifications").insert({
-    recipient_id: booking.driver_id,
-    type: "booking_approved",
-    message: `${booking.title || "Booking"} approved${booking.series_id ? ` (${rows.length} occurrences)` : ""}${note ? `: ${note}` : ""}`,
-    related_table: "bookings",
-    related_id: booking.id,
-  });
+  await notifyDriver(
+    supabase,
+    booking.id,
+    "booking_approved",
+    `${booking.title || "Booking"} approved${booking.series_id ? ` (${rows.length} occurrences)` : ""}${note ? `: ${note}` : ""}`
+  );
 
   await supabase.from("audit_log").insert({
     user_id: user!.id,
@@ -140,16 +140,9 @@ export async function declineBooking(bookingId: string, prevState: ActionState, 
   const { error } = await query;
   if (error) return { error: "Something went wrong declining this booking. Please try again." };
 
-  await supabase.from("notifications").insert({
-    recipient_id: booking.driver_id,
-    // Declining a pending request and cancelling an approved one are the same
-    // event from the driver's point of view — declining is what cancels the
-    // booking, so both are notified as "declined".
-    type: "booking_declined",
-    message: `${booking.title || "Booking"} declined${note ? `: ${note}` : ""}`,
-    related_table: "bookings",
-    related_id: booking.id,
-  });
+  // Declining a pending request and cancelling an approved one are the same
+  // event from the driver's point of view, so both are notified as "declined".
+  await notifyDriver(supabase, booking.id, "booking_declined", `${booking.title || "Booking"} declined${note ? `: ${note}` : ""}`);
 
   await supabase.from("audit_log").insert({
     user_id: user!.id,
@@ -167,19 +160,27 @@ export async function declineBooking(bookingId: string, prevState: ActionState, 
 
 export async function adminCancelBooking(bookingId: string) {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (callerProfile?.role !== "admin") return;
 
   const { data: booking } = await supabase.from("bookings").select("*").eq("id", bookingId).single();
-  await supabase.from("bookings").update({ booking_status: "cancelled" }).eq("id", bookingId);
+  if (!booking) return;
 
-  if (booking) {
-    await supabase.from("notifications").insert({
-      recipient_id: booking.driver_id,
-      type: "booking_declined",
-      message: `${booking.title || "Booking"} declined by an admin`,
-      related_table: "bookings",
-      related_id: booking.id,
-    });
+  const { data: cancelled } = await supabase
+    .from("bookings")
+    .update({ booking_status: "cancelled" })
+    .eq("id", bookingId)
+    .select("id");
+
+  if (cancelled && cancelled.length > 0) {
+    await notifyDriver(supabase, booking.id, "booking_declined", `${booking.title || "Booking"} declined by an admin`);
   }
 
   revalidatePath("/admin/bookings");
+  revalidatePath("/bookings");
 }
