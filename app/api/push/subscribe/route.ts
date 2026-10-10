@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
   const supabase = createClient();
@@ -17,11 +18,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Malformed subscription" }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from("push_subscriptions")
-    .upsert({ user_id: user.id, endpoint, p256dh, auth }, { onConflict: "endpoint" });
+  const { data: me } = await supabase.from("profiles").select("organisation_id").eq("id", user.id).single();
+  if (!me?.organisation_id) return NextResponse.json({ error: "No organisation" }, { status: 400 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // A phone's push endpoint is unique per browser, not per person. On a
+  // shared phone (one driver signs out, another signs in) the row still
+  // belongs to the previous person, and RLS stopped this upsert from taking
+  // it over, so the new person never got notifications. Hand the endpoint
+  // to whoever just turned notifications on, server-side.
+  const admin = createAdminClient();
+  await admin.from("push_subscriptions").delete().eq("endpoint", endpoint).neq("user_id", user.id);
+  const { error } = await admin
+    .from("push_subscriptions")
+    .upsert(
+      { user_id: user.id, endpoint, p256dh, auth, organisation_id: me.organisation_id },
+      { onConflict: "endpoint" }
+    );
+
+  if (error) return NextResponse.json({ error: "Couldn't save this device for notifications." }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 

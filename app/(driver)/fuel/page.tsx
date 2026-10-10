@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/nz-time";
 import BackButton from "@/components/BackButton";
 import { getCurrentUser } from "@/lib/supabase/current";
+import { withPhotoUrls } from "@/lib/photos";
 
 export default async function MyFuelPage() {
   const supabase = createClient();
@@ -14,8 +15,8 @@ export default async function MyFuelPage() {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  const rows = logs ?? [];
-  const totalLitres = rows.reduce((s, l) => s + l.litres, 0);
+  const rows = await withPhotoUrls(supabase, logs ?? [], "receipt_photo_url");
+  const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
   const totalCost = rows.reduce((s, l) => s + l.cost, 0);
 
   return (

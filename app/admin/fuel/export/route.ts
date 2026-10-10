@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
+import { isPrivateRef } from "@/lib/photos";
 import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 
 export async function GET(request: Request) {
@@ -29,7 +30,11 @@ export async function GET(request: Request) {
     litres: l.litres,
     cost: l.cost,
     notes: l.notes ?? "",
-    receipt_url: l.receipt_photo_url ?? "",
+    receipt_url: !l.receipt_photo_url
+      ? ""
+      : isPrivateRef(l.receipt_photo_url)
+        ? "in the Monthly Receipts ZIP"
+        : l.receipt_photo_url,
   }));
 
   const csv = toCsv(rows, ["date", "driver", "vehicle", "registration", "odometer_km", "litres", "cost", "notes", "receipt_url"]);

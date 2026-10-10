@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import VehicleCheckDetail from "@/components/VehicleCheckDetail";
+import { withPhotoUrls } from "@/lib/photos";
 import BackButton from "@/components/BackButton";
 
 export default async function AdminVehicleCheckDetailPage({ params }: { params: { id: string } }) {
@@ -20,6 +21,9 @@ export default async function AdminVehicleCheckDetailPage({ params }: { params: 
     return <p className="text-sm text-steel">Check not found.</p>;
   }
 
+  // Private photos become short-lived signed links for this viewer.
+  const itemsWithPhotos = await withPhotoUrls(supabase, items ?? [], "photo_url");
+
   const itemIds = (items ?? []).map((it) => it.id);
   const { data: existingIncidents } = itemIds.length
     ? await supabase.from("incident_reports").select("id, source_vehicle_check_item_id").in("source_vehicle_check_item_id", itemIds)
@@ -34,7 +38,7 @@ export default async function AdminVehicleCheckDetailPage({ params }: { params: 
     <div>
       <BackButton label="Back to Checks" />
       <h1 className="mb-4 mt-2 font-display text-xl font-bold text-ink">Vehicle Check</h1>
-      <VehicleCheckDetail check={check} items={items ?? []} checkId={params.id} incidentByItemId={incidentByItemId} />
+      <VehicleCheckDetail check={check} items={itemsWithPhotos} checkId={params.id} incidentByItemId={incidentByItemId} />
     </div>
   );
 }

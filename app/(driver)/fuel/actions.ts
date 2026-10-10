@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { PRIVATE_BUCKET, privateRef, fileExtension } from "@/lib/photos";
 
 type ActionState = { error: string | null; success?: boolean };
 
@@ -60,16 +61,20 @@ export async function logFuel(prevState: ActionState, formData: FormData): Promi
     return { error: "Please attach a photo of the receipt." };
   }
 
-  let receiptPhotoUrl: string | null = null;
-  const ext = receipt.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-  const path = `fuel/${user.id}-${Date.now()}.${ext}`;
+  // Private bucket, under this organisation and driver (migration 0023):
+  // only this org's admins and the driver themselves can open it.
+  const { data: me } = await supabase.from("profiles").select("organisation_id").eq("id", user.id).single();
+  if (!me?.organisation_id) {
+    return { error: "Couldn't find your organisation. Please sign out and in again." };
+  }
+  const path = `${me.organisation_id}/${user.id}/fuel/${Date.now()}.${fileExtension(receipt)}`;
   const { error: uploadError } = await supabase.storage
-    .from("vehicle-photos")
+    .from(PRIVATE_BUCKET)
     .upload(path, receipt, { contentType: receipt.type });
   if (uploadError) {
     return { error: "Couldn't upload the receipt photo. Please try again." };
   }
-  receiptPhotoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
+  const receiptPhotoUrl = privateRef(path);
 
   const { error } = await supabase.from("fuel_logs").insert({
     vehicle_id: vehicleId,

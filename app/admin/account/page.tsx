@@ -6,6 +6,7 @@ import { adminTourSteps } from "@/components/tour/tourSteps";
 import OrganisationCard from "./OrganisationCard";
 import FeatureTogglesCard from "./FeatureTogglesCard";
 import ReceiptSettingsCard from "./ReceiptSettingsCard";
+import StorageUsageCard from "./StorageUsageCard";
 import { isEmailConfigured } from "@/lib/email";
 import { normaliseFeatures } from "@/lib/orgFeatures";
 import { getCurrentUser } from "@/lib/supabase/current";
@@ -60,6 +61,10 @@ export default async function AdminAccountPage() {
           />
         </div>
       )}
+
+      <div className="mb-4 max-w-sm">
+        <StorageUsageCard />
+      </div>
 
       <div className="max-w-sm space-y-3 rounded-xl border border-steel/20 bg-white p-4">
         <div>

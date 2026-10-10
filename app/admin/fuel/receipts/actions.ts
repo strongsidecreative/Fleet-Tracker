@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getMonthReceipts, buildReceiptZip, receiptEmailHtml, zipFolderName, MAX_EMAIL_ZIP_BYTES } from "@/lib/receipts";
 import { currentMonthKey, isMonthKey } from "@/lib/receiptMonths";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { resolvePhotoUrls } from "@/lib/photos";
 
 type Caller = {
   supabase: ReturnType<typeof createClient>;
@@ -68,12 +69,17 @@ export async function getReceiptDownloadPlan(monthKey: string): Promise<Download
 
   const month = await getMonthReceipts(caller.supabase, caller.organisationId, monthKey);
   if (month.logCount === 0) return { error: "No fuel was logged that month." };
+  // Private photos: signed links (1 hour) the browser can fetch directly.
+  const urls = await resolvePhotoUrls(caller.supabase, month.files.map((f) => f.value));
   return {
     error: null,
     folder: zipFolderName(monthKey, caller.organisationName),
     csvName: `fuel-log-${monthKey.slice(0, 7)}.csv`,
     csv: month.csv,
-    files: month.files.map((f) => ({ fileName: f.fileName, url: f.publicUrl })),
+    files: month.files.flatMap((f) => {
+      const url = urls.get(f.value);
+      return url ? [{ fileName: f.fileName, url }] : [];
+    }),
   };
 }
 

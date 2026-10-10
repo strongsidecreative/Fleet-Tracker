@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { toCsv } from "./csv";
 import { monthRangeIso, monthLabel } from "./receiptMonths";
 import { escapeHtml } from "./email";
+import { storageLocation } from "./photos";
 
 /**
  * Monthly fuel receipt export. SERVER-ONLY (the ZIP builder downloads
@@ -11,13 +12,13 @@ import { escapeHtml } from "./email";
  * so a large month never hits Vercel's 4.5 MB response limit.
  */
 
-export const RECEIPT_BUCKET = "vehicle-photos";
 
 // Resend's 40 MB limit counts the attachment after base64 (x1.33), so
 // keep the raw ZIP comfortably under ~28 MB; above this, email a link.
 export const MAX_EMAIL_ZIP_BYTES = 25 * 1024 * 1024;
 
-export type ReceiptFile = { fileName: string; storagePath: string; publicUrl: string };
+/** value = what fuel_logs stores (private ref or older public URL); bucket/path = where the file lives. */
+export type ReceiptFile = { fileName: string; value: string; bucket: string; path: string };
 export type MonthReceipts = {
   monthKey: string;
   label: string;
@@ -26,13 +27,6 @@ export type MonthReceipts = {
   logCount: number;
   totalCost: number;
 };
-
-/** Storage path inside the bucket, from a stored public URL. */
-export function storagePathFromUrl(url: string): string | null {
-  const marker = `/object/public/${RECEIPT_BUCKET}/`;
-  const i = url.indexOf(marker);
-  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length).split("?")[0]);
-}
 
 function safe(part: string): string {
   return part
@@ -77,14 +71,14 @@ export async function getMonthReceipts(client: SupabaseClient, organisationId: s
     const date = when.toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
     const time = when.toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "2-digit", minute: "2-digit", hour12: false });
     let fileName = "";
-    const path = r.receipt_photo_url ? storagePathFromUrl(r.receipt_photo_url) : null;
-    if (r.receipt_photo_url && path) {
-      const ext = (path.split(".").pop() || "jpg").toLowerCase();
+    const loc = storageLocation(r.receipt_photo_url);
+    if (r.receipt_photo_url && loc) {
+      const ext = (loc.path.split(".").pop() || "jpg").toLowerCase();
       const base = `${date}_${safe(r.vehicle?.registration ?? "vehicle")}_${safe(r.driver?.name ?? "driver")}_${r.cost.toFixed(2)}`;
       fileName = `${base}.${ext}`;
       for (let n = 2; used.has(fileName); n++) fileName = `${base}_${n}.${ext}`;
       used.add(fileName);
-      files.push({ fileName, storagePath: path, publicUrl: r.receipt_photo_url });
+      files.push({ fileName, value: r.receipt_photo_url, bucket: loc.bucket, path: loc.path });
     }
     return {
       date,
@@ -124,7 +118,7 @@ export async function buildReceiptZip(
   const entries: Zippable = { [`${folder}/fuel-log-${month.monthKey.slice(0, 7)}.csv`]: strToU8(month.csv) };
   let missing = 0;
   for (const f of month.files) {
-    const { data, error } = await admin.storage.from(RECEIPT_BUCKET).download(f.storagePath);
+    const { data, error } = await admin.storage.from(f.bucket).download(f.path);
     if (error || !data) {
       missing++;
       continue;

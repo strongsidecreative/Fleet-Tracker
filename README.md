@@ -1,86 +1,105 @@
 # Fleet Tracker
 
-Mobile-first web app for tracking who's using which of the family's 8 vehicles, via a QR
-code scan at the start and end of every trip. Built for zero ongoing cost.
+Mobile-first fleet management web app (installable PWA): drivers scan a vehicle's QR code to
+start and finish trips, book vehicles, run vehicle checks, report incidents and log fuel;
+admins manage vehicles, people, compliance (WOF / rego / RUC / servicing / licences),
+approvals, receipts and reports. One shared deployment serves many organisations, each fully
+separated by Postgres Row Level Security. Built to run at $0/month on free tiers.
 
 ## Stack
 
-- **Next.js 14** (App Router), deployed on **Vercel** free tier
-- **Supabase** free tier: Postgres database, Auth, and Row Level Security
-- **Tailwind CSS** for styling
-- **qrcode** (npm package) for generating vehicle QR codes client-side, no paid QR service
+- **Next.js 14** (App Router, 14.2.35), deployed on **Vercel** (functions in `sin1`, next to the database)
+- **Supabase** free tier: Postgres, Auth, Storage, Row Level Security, `pg_cron` + `pg_net` for scheduled jobs
+- **Tailwind CSS**; `html5-qrcode` (scanning), `qrcode` (QR generation), `recharts` (charts),
+  `web-push` (push notifications), `fflate` (receipt ZIPs)
+- **Resend** free tier for email (monthly receipts); optional, the app works without it
 
-All of this runs at $0/month for a family's usage volume. If you ever need to leave Supabase,
-it's plain Postgres underneath, so the database can be exported and self-hosted without
-rebuilding the app.
+All times are Pacific/Auckland, through `lib/nz-time.ts` (the server runs in UTC, so never
+parse a typed date/time with `new Date("YYYY-MM-DDTHH:MM")`; use `nzLocalToDate`).
 
-## What's built so far
+## Current state (October 2026)
 
-- Full schema live in Supabase (migrations 0001–0007): vehicles, trips, bookings, incidents,
-  full compliance/RUC/servicing tracking, notifications, driver licences, standalone vehicle
-  checks, all with RLS and database-level constraints
-- **Driver flow, fully wired**: dashboard, real camera QR scanning, start/finish trip, My
-  Trips, Vehicles, Account (with read-only licence info), Bookings, Report an Incident, and
-  standalone Vehicle Check (9-item checklist, not tied to trips)
-- **Admin flow, fully wired**: Dashboard (Vehicle Alerts table), Vehicles (add/edit/QR
-  generation+printing, full compliance fields), Drivers (with licence management) and Admins
-  (invite, deactivate/reactivate — no hard deletes), Bookings, Incidents, Vehicle Checks
-  (filterable list + full detail view), Reports (CSV export), Records (CSV export), Sessions,
-  Audit, Notifications, Account
-- Forgot/reset password using Supabase's built-in email flow
-- **Full WOF / Registration / RUC / Service reminder system**: threshold-based alerts,
-  recalculated instantly whenever a driver finishes a trip, plus a daily sweep for anything
-  date-based, deduplicated per due-value cycle
-- **Driver licence tracking**: admin-only management, automatic Valid/Expiring Soon/
-  Urgent/Expired status, alerts on the same 30/14/7/expired schedule, feeding into the
-  existing notification system
-- **Standalone Vehicle Check**: pre/post-operation inspection with a 9-item checklist,
-  mandatory comments and optional photos on any Issue, initials sign-off, and a permanent
-  read-only record — completely separate from the QR checkout/return flow, exactly like
-  Report an Incident
+- **Multi-organisation**: `/setup?token=<SETUP_TOKEN>` creates a new organisation and its first
+  admin. Every table carries `organisation_id`; RLS scopes all reads and writes to the
+  viewer's organisation. Per-organisation feature toggles (Account → Features).
+- **Driver**: dashboard, QR scan, start/finish trip, My Trips, Vehicles, Bookings (incl.
+  recurring, edit → re-approval), Vehicle Check (compulsory pre-op check Mon/Fri), Report
+  Incident, Fuel (in-trip, receipt photo), Account, guided tour.
+- **Admin**: Dashboard, Vehicles (+QR cards, compliance, edit name/rego/make/model, archive or
+  delete with records), People (invite, bulk invite, deactivate/remove/delete), Bookings
+  (approve/decline, conflict checks), Fuel (+ Monthly Receipts), Incidents, Checks, Reports,
+  Records/Sessions, Audit, Notifications (clearable), Account (organisation, features,
+  receipt settings, photo storage meter, push), guided tour.
+- **Photos**: fuel receipts and check photos are in the private `private-photos` bucket under
+  `<org>/<uploader>/…`, shown through 1-hour signed links (`lib/photos.ts`). Vehicle photos
+  are public under `vehicles/<org>/…`. Photos are shrunk in the browser before upload
+  (`lib/shrinkImage.ts`) and deleted when their records are deleted.
+- **Monthly receipts**: daily job prompts admins (banner, push, email) to save last month's
+  receipts as a ZIP, or emails it automatically; saved months' photos are cleared after the
+  organisation's retention period (default 3 months). Fuel log rows are always kept.
 
-## Not built yet
+## Database migrations
 
-Everything from both specs is now built. What's left is deployment (a real domain instead of
-localhost) and swapping in real whānau/vehicle data. One deliberate omission: there's no
-"Create Incident" / "Create Maintenance Item" quick-action from a Vehicle Check Issue yet —
-that needs an admin-side incident-creation pathway that doesn't exist yet (incidents are
-currently driver-submitted only). Worth building as a follow-up, not required for launch.
+Run in order in the Supabase SQL Editor: `supabase/migrations/0001` … `0023`. All are safe
+to re-run. Notable recent ones:
 
-## One-time setup still needed
+| Migration | What it does |
+|---|---|
+| 0013 | Multi-organisation (organisation_id + RLS everywhere) |
+| 0020 | `is_admin()` as SECURITY DEFINER (fixes RLS recursion) |
+| 0021 | Audit fixes: trip triggers as SECURITY DEFINER (odometer, booking lock), org-scoped alerts, fuel_logs org scoping, driver booking notifications, active-only admins |
+| 0022 | Monthly receipts (receipt_exports, settings, daily job), clearable notifications, stale cron jobs removed |
+| 0023 | Private photo bucket, org-scoped storage rules, storage usage RPC |
 
-1. Run `supabase/migrations/0005_compliance_system.sql`,
-   `supabase/migrations/0006_vehicle_photos.sql`, and
-   `supabase/migrations/0007_driver_licence_vehicle_checks.sql` in the SQL Editor (same
-   process as the earlier ones, one at a time) if you haven't already. **0007 does not modify
-   or depend on changes to 0001–0006** — if you've already run everything through 0006, you
-   only need to run 0007.
-2. Service role key and Auth redirect URL, as covered earlier — needed for Add Driver, Add
-   Admin, and password resets.
-3. `npm install` to pick up `html5-qrcode` and `recharts` if you haven't already.
+**Deploy order:** apply a new migration first, then push the code that uses it.
+
+## Scheduled jobs (pg_cron, UTC)
+
+- `check_maintenance_due_job` 07:00: WOF/rego/RUC/service alerts per vehicle
+- `check_driver_licences_job` 07:00: licence expiry alerts
+- `monthly-receipts-daily` 19:15: calls `/api/cron/receipts` (prompts, auto-email, photo tidy-up)
+
+Push notifications: a trigger on `notifications` calls `/api/push/dispatch` via `pg_net`.
+Both routes authenticate with `app_config.push_dispatch_secret`, which must equal Vercel's
+`PUSH_DISPATCH_SECRET`.
+
+## Environment variables (Vercel → Production, and `.env.local` for local dev)
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only: invites, deletes, receipt jobs. Never in client code |
+| `NEXT_PUBLIC_SITE_URL` | Live URL, used in QR codes and email links |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Push notifications |
+| `PUSH_DISPATCH_SECRET` | Shared secret with the database (see above) |
+| `SETUP_TOKEN` | Required on `/setup?token=…` to create an organisation |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Optional email (sending domain verified in Resend) |
+
+After adding or changing a variable in Vercel, redeploy for it to take effect.
+
+## Local development
+
+1. Copy `.env.example` to `.env.local` and fill in the values above.
+2. `npm install`
+3. `npm run dev`
+
+## Deferred (not built)
+
+- Saved booking templates
+- Calendar grid (day/week/month) for bookings; bookings show as lists
+- Per-occurrence partial approval of recurring bookings (a series is approved or blocked as a whole)
+- Next.js 15/16 upgrade (some advisories only have fixes there)
+- Recharts v3 upgrade
 
 ## Design direction
 
-Palette and type system live in `tailwind.config.js`, named `ink` / `steel` / `paper` /
-`amber` / `track` / `rust`. The signature element is the `.odometer` text style in
-`globals.css` — KM stats are set in a tabular-numeral display face so they read like a real
-vehicle odometer, tying the visual identity back to what the app actually tracks. Amber means
-a vehicle is in use, green means available, rust is reserved for validation errors like a
-rejected odometer reading.
+Palette and type system live in `tailwind.config.js` (`ink` / `steel` / `paper` / `brand` /
+`brandLight` / `amber` / `track` / `rust`). The `.odometer` text style in `globals.css` sets KM
+stats in a tabular-numeral display face. Amber means in use, green available, rust errors.
 
-## Setup (once we're ready to actually run this)
+## History
 
-1. Create a free Supabase project at supabase.com.
-2. In the SQL Editor, run `supabase/migrations/0001_init.sql`.
-3. Copy `.env.example` to `.env.local` and fill in the three values from
-   Project Settings → API in Supabase.
-4. `npm install`
-5. `npm run dev`
-
-Full non-developer setup instructions (creating the first admin, adding drivers and
-vehicles, deploying to Vercel, generating and printing QR codes, backups) will be written
-once the corresponding features are built, so the README stays accurate to what actually
-exists.
+The sections below record how individual features were built, in order.
 
 ## Booking approval system (migration 0008)
 

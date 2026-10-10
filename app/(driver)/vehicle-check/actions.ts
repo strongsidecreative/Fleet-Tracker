@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { CHECKLIST_ITEMS } from "@/lib/vehicleCheckItems";
+import { PRIVATE_BUCKET, privateRef, fileExtension } from "@/lib/photos";
 
 type ActionState = { error: string | null };
 
@@ -73,13 +74,13 @@ export async function submitVehicleCheck(prevState: ActionState, formData: FormD
     let photoUrl: string | null = null;
 
     if (item.photo) {
-      const ext = item.photo.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-      const path = `checks/${check.id}-${item.key}-${Date.now()}.${ext}`;
+      // Private bucket, under this organisation and driver (migration 0023).
+      const path = `${check.organisation_id}/${user!.id}/checks/${check.id}-${item.key}-${Date.now()}.${fileExtension(item.photo)}`;
       const { error: uploadError } = await supabase.storage
-        .from("vehicle-photos")
+        .from(PRIVATE_BUCKET)
         .upload(path, item.photo, { contentType: item.photo.type });
       if (!uploadError) {
-        photoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
+        photoUrl = privateRef(path);
       }
     }
 

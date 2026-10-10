@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import VehicleCheckDetail from "@/components/VehicleCheckDetail";
+import { withPhotoUrls } from "@/lib/photos";
 import SuccessBanner from "@/components/SuccessBanner";
 import BackButton from "@/components/BackButton";
 
@@ -21,12 +22,15 @@ export default async function DriverVehicleCheckDetailPage({ params }: { params:
     return <p className="text-sm text-steel">Check not found.</p>;
   }
 
+  // Private photos become short-lived signed links for this viewer.
+  const itemsWithPhotos = await withPhotoUrls(supabase, items ?? [], "photo_url");
+
   return (
     <div>
       <BackButton label="Back" />
       <SuccessBanner />
       <h1 className="mb-4 font-display text-xl font-bold text-ink">Vehicle Check</h1>
-      <VehicleCheckDetail check={check} items={items ?? []} />
+      <VehicleCheckDetail check={check} items={itemsWithPhotos} />
     </div>
   );
 }

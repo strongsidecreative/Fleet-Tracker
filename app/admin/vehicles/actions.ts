@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { PUBLIC_BUCKET, fileExtension, removePhotos } from "@/lib/photos";
 
 type ActionState = { error: string | null };
 
@@ -75,6 +76,7 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
   const photo = formData.get("photo") as File | null;
 
   let photoUrl: string | undefined;
+  let previousPhoto: string | null = null;
 
   if (photo && photo.size > 0) {
     if (!photo.type.startsWith("image/")) {
@@ -84,18 +86,28 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
       return { error: "Photo is too large. Please use an image under 4MB." };
     }
 
-    const ext = photo.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const path = `${vehicleId}-${Date.now()}.${ext}`;
+    // Organisation folder (migration 0023): Storage only lets an admin
+    // upload into, replace or delete photos under their own organisation.
+    const { data: current } = await supabase
+      .from("vehicles")
+      .select("organisation_id, photo_url")
+      .eq("id", vehicleId)
+      .single();
+    if (!current) {
+      return { error: "That vehicle couldn't be found." };
+    }
+    previousPhoto = current.photo_url;
+    const path = `vehicles/${current.organisation_id}/${vehicleId}-${Date.now()}.${fileExtension(photo)}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("vehicle-photos")
-      .upload(path, photo, { contentType: photo.type, upsert: true });
+      .from(PUBLIC_BUCKET)
+      .upload(path, photo, { contentType: photo.type });
 
     if (uploadError) {
       return { error: "Something went wrong uploading the photo. Please try again." };
     }
 
-    photoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
+    photoUrl = supabase.storage.from(PUBLIC_BUCKET).getPublicUrl(path).data.publicUrl;
   }
 
   const { data: saved, error } = await supabase
@@ -122,6 +134,11 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
 
   if (error || !saved || saved.length === 0) {
     return { error: "Something went wrong saving these changes. Please try again." };
+  }
+
+  // Replaced photo: remove the old file so it stops using storage.
+  if (photoUrl && previousPhoto && previousPhoto !== photoUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await removePhotos(createAdminClient(), [previousPhoto]);
   }
 
   revalidatePath("/admin/vehicles");
@@ -212,7 +229,7 @@ export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ erro
   }
   const admin = createAdminClient();
 
-  const { data: vehicle } = await admin.from("vehicles").select("id, organisation_id").eq("id", vehicleId).maybeSingle();
+  const { data: vehicle } = await admin.from("vehicles").select("id, organisation_id, photo_url").eq("id", vehicleId).maybeSingle();
   if (!vehicle || vehicle.organisation_id !== callerProfile.organisation_id) {
     return { error: "You're not authorised to do that." };
   }
@@ -240,6 +257,22 @@ export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ erro
     const { data: items } = await admin.from("vehicle_check_items").select("id").in("check_id", checkIds);
     checkItemIds = (items ?? []).map((i: { id: string }) => i.id);
   }
+
+  // Photo files attached to anything being deleted, removed from Storage
+  // once the rows are gone (otherwise they'd sit there using free space).
+  const [{ data: fuelPhotos }, { data: incidentPhotos }, checkPhotos] = await Promise.all([
+    admin.from("fuel_logs").select("receipt_photo_url").eq("vehicle_id", vehicleId).not("receipt_photo_url", "is", null),
+    admin.from("incident_reports").select("photo_url").eq("vehicle_id", vehicleId).not("photo_url", "is", null),
+    checkIds.length > 0
+      ? admin.from("vehicle_check_items").select("photo_url").in("check_id", checkIds).not("photo_url", "is", null)
+      : Promise.resolve({ data: [] as { photo_url: string }[] }),
+  ]);
+  const photosToRemove: (string | null)[] = [
+    vehicle.photo_url,
+    ...(fuelPhotos ?? []).map((r: { receipt_photo_url: string }) => r.receipt_photo_url),
+    ...(incidentPhotos ?? []).map((r: { photo_url: string }) => r.photo_url),
+    ...(checkPhotos.data ?? []).map((r: { photo_url: string }) => r.photo_url),
+  ];
 
   type Step = { label: string; run: () => PromiseLike<{ error: { message: string } | null }> };
   const deleteSteps: Step[] = [
@@ -272,6 +305,8 @@ export async function deleteVehicleAndRecords(vehicleId: string): Promise<{ erro
       error: `Every record for this vehicle was deleted, but removing the vehicle itself failed${error ? `: ${error.message}` : ""}. Please try again.`,
     };
   }
+
+  await removePhotos(admin, photosToRemove);
 
   revalidatePath("/admin/vehicles");
   revalidatePath("/admin");

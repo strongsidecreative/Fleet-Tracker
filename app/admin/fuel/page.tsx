@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/nz-time";
+import { withPhotoUrls } from "@/lib/photos";
 
 export default async function AdminFuelPage({ searchParams }: { searchParams: { vehicleId?: string } }) {
   const supabase = createClient();
@@ -15,7 +16,7 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: { 
   }
 
   const { data: logs } = await query;
-  const rows = logs ?? [];
+  const rows = await withPhotoUrls(supabase, logs ?? [], "receipt_photo_url");
 
   const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
   const totalCost = rows.reduce((s, l) => s + l.cost, 0);

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
 import { driverHasHistory } from "./history";
+import { removePhotos } from "@/lib/photos";
 
 /**
  * Deactivate / reactivate an admin from the People list. Deactivating
@@ -476,6 +477,21 @@ export async function deleteDriverAndRecordsFromAdmin(userId: string) {
     checkItemIds = (items ?? []).map((i: { id: string }) => i.id);
   }
 
+  // Photo files on this driver's own records, removed from Storage after
+  // the rows are gone.
+  const [{ data: fuelPhotos }, { data: incidentPhotos }, checkPhotos] = await Promise.all([
+    adminClient.from("fuel_logs").select("receipt_photo_url").eq("driver_id", userId).not("receipt_photo_url", "is", null),
+    adminClient.from("incident_reports").select("photo_url").eq("driver_id", userId).not("photo_url", "is", null),
+    checkIds.length > 0
+      ? adminClient.from("vehicle_check_items").select("photo_url").in("check_id", checkIds).not("photo_url", "is", null)
+      : Promise.resolve({ data: [] as { photo_url: string }[] }),
+  ]);
+  const photosToRemove: (string | null)[] = [
+    ...(fuelPhotos ?? []).map((r: { receipt_photo_url: string }) => r.receipt_photo_url),
+    ...(incidentPhotos ?? []).map((r: { photo_url: string }) => r.photo_url),
+    ...(checkPhotos.data ?? []).map((r: { photo_url: string }) => r.photo_url),
+  ];
+
   type Step = { label: string; run: () => PromiseLike<{ error: { message: string } | null }> };
   const steps: Step[] = [
     // Detach references on rows that aren't this driver's own.
@@ -505,6 +521,8 @@ export async function deleteDriverAndRecordsFromAdmin(userId: string) {
     const { error } = await step.run();
     if (error) fail(`Something went wrong deleting this driver's ${step.label} (nothing further was deleted): ${error.message}`);
   }
+
+  await removePhotos(adminClient, photosToRemove);
 
   const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
   if (deleteError) fail("Every record for this driver was deleted, but removing the login itself failed. Please try again.");

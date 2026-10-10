@@ -198,6 +198,15 @@ export const adminTourSteps: TourStep[] = [
     placement: "auto",
   },
   {
+    id: "nav-fuel",
+    path: "/admin",
+    target: ["[data-tour='nav-admin-fuel']", "[data-tour='nav-admin-more']"],
+    title: "Fuel",
+    content:
+      "Every fill-up drivers log, with receipt photos. Monthly Receipts (top of the Fuel page) downloads or emails each month's receipts as one ZIP; at the start of each month you'll be prompted to save last month's. On mobile, find it under More.",
+    placement: "auto",
+  },
+  {
     id: "nav-records",
     path: "/admin",
     target: ["[data-tour='nav-admin-records']", "[data-tour='nav-admin-more']"],
@@ -218,7 +227,7 @@ export const adminTourSteps: TourStep[] = [
     path: "/admin",
     target: ["[data-tour='nav-admin-notifications']", "[data-tour='nav-admin-more']"],
     title: "Notifications",
-    content: "Alerts that need your attention — new bookings, overdue vehicles, and more. On mobile, a small dot on the More tab shows when something's unread.",
+    content: "Alerts that need your attention — new bookings, compliance due dates, receipts ready to save, and more. Clear any you've dealt with, or Clear all. On mobile, a small dot on the More tab shows when something's unread.",
     placement: "auto",
   },
   {
@@ -226,7 +235,7 @@ export const adminTourSteps: TourStep[] = [
     path: "/admin",
     target: ["[data-tour='nav-admin-account']", "[data-tour='nav-admin-more']"],
     title: "Account",
-    content: "Your admin profile and settings. You can also replay this tour any time from this page. On mobile, find it under More.",
+    content: "Your admin profile, organisation name, which features are switched on, monthly receipt settings, photo storage used, and phone notifications. You can also replay this tour any time from this page. On mobile, find it under More.",
     placement: "auto",
   },
   {

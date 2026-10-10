@@ -7,11 +7,10 @@ import {
   buildReceiptZip,
   receiptEmailHtml,
   zipFolderName,
-  storagePathFromUrl,
-  RECEIPT_BUCKET,
   MAX_EMAIL_ZIP_BYTES,
 } from "@/lib/receipts";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { storageLocation } from "@/lib/photos";
 
 // Called once a day by pg_cron (migration 0022, run_receipt_job()),
 // authenticated with the same secret as the push dispatcher. Safe to call
@@ -140,17 +139,23 @@ export async function POST(req: NextRequest) {
         .not("receipt_photo_url", "is", null)
         .limit(MAX_PURGE_PER_RUN - purgedThisRun);
 
-      const batch = (logs ?? []).map((l) => ({ id: l.id, path: storagePathFromUrl(l.receipt_photo_url!) }));
+      const batch = (logs ?? []).map((l) => ({ id: l.id, loc: storageLocation(l.receipt_photo_url) }));
       for (let i = 0; i < batch.length; i += 100) {
         const chunk = batch.slice(i, i + 100);
-        const paths = chunk.map((c) => c.path).filter((p): p is string => !!p);
-        if (paths.length > 0) {
-          const { error } = await admin.storage.from(RECEIPT_BUCKET).remove(paths);
+        // Private receipts and older public ones live in different buckets.
+        const byBucket = new Map<string, string[]>();
+        for (const c of chunk) {
+          if (c.loc) byBucket.set(c.loc.bucket, [...(byBucket.get(c.loc.bucket) ?? []), c.loc.path]);
+        }
+        let failed = false;
+        for (const [bucket, paths] of Array.from(byBucket.entries())) {
+          const { error } = await admin.storage.from(bucket).remove(paths);
           if (error) {
-            console.error("receipt purge: storage remove failed", error.message);
-            break;
+            console.error("receipt purge: storage remove failed", bucket, error.message);
+            failed = true;
           }
         }
+        if (failed) break;
         await admin
           .from("fuel_logs")
           .update({ receipt_photo_url: null, receipt_purged_at: new Date().toISOString() })
