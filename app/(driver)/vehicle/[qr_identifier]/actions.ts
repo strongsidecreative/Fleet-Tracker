@@ -7,7 +7,15 @@ import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
 import { getViewerFeatures } from "@/lib/orgFeatures.server";
 import { tripLocationFrom } from "@/lib/geo";
 
-type ActionState = { error: string | null };
+import { kmCaution } from "@/lib/kmCheck";
+
+// confirm/confirmKm: the reading looks like a typo; the form asks the
+// driver to double-check and resubmits with confirmed=<km> if it's right.
+type ActionState = { error: string | null; confirm?: string | null; confirmKm?: number | null };
+
+function confirmedKm(formData: FormData, km: number): boolean {
+  return Number(formData.get("confirmed")) === km;
+}
 
 export async function startTrip(
   vehicleId: string,
@@ -56,6 +64,12 @@ export async function startTrip(
         };
       }
     }
+  }
+
+  if (!confirmedKm(formData, km)) {
+    const { data: v } = await supabase.from("vehicles").select("current_odometer").eq("id", vehicleId).single();
+    const caution = v ? kmCaution(km, Number(v.current_odometer), "start") : null;
+    if (caution) return { error: null, confirm: caution, confirmKm: km };
   }
 
   const where = await tripLocationFrom(formData);
@@ -107,6 +121,12 @@ export async function finishTrip(
 
   if (!kmRaw || Number.isNaN(km)) {
     return { error: "Please enter the kilometre reading shown on the vehicle." };
+  }
+
+  if (!confirmedKm(formData, km)) {
+    const { data: t } = await supabase.from("vehicle_usage").select("start_km").eq("id", tripId).single();
+    const caution = t ? kmCaution(km, Number(t.start_km), "finish") : null;
+    if (caution) return { error: null, confirm: caution, confirmKm: km };
   }
 
   const where = await tripLocationFrom(formData);

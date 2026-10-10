@@ -5,6 +5,8 @@ import TripPlaces from "@/components/TripPlaces";
 import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
 import { Fragment } from "react";
 import DownloadLink from "@/components/DownloadLink";
+import CorrectKmForm from "./CorrectKmForm";
+import { KM_CAUTION_JUMP } from "@/lib/kmCheck";
 
 function hoursOpen(start: string) {
   const ms = Date.now() - new Date(start).getTime();
@@ -52,6 +54,23 @@ export default async function AdminRecordsPage({
     query,
   ]);
 
+  // KM not logged between trips: a trip that starts higher than the same
+  // vehicle's previous trip ended means someone drove it without a trip
+  // (often a trip that was never started, or a forgotten finish). Only
+  // compared within the rows shown here.
+  const gapById: Record<string, number> = {};
+  const byVehicle: Record<string, NonNullable<typeof trips>> = {};
+  (trips ?? []).forEach((t) => {
+    (byVehicle[t.vehicle_id] ??= []).push(t);
+  });
+  Object.values(byVehicle).forEach((list) => {
+    const asc = [...list].sort((a, b) => a.start_datetime.localeCompare(b.start_datetime));
+    for (let i = 1; i < asc.length; i++) {
+      const prevEnd = asc[i - 1].end_km;
+      if (prevEnd != null && asc[i].start_km > prevEnd) gapById[asc[i].id] = asc[i].start_km - prevEnd;
+    }
+  });
+
   const exportParams = new URLSearchParams();
   if (driverId) exportParams.set("driverId", driverId);
   if (vehicleId) exportParams.set("vehicleId", vehicleId);
@@ -82,6 +101,7 @@ export default async function AdminRecordsPage({
                 </p>
                 <TripPlaces trip={t} />
                 <CloseSessionForm tripId={t.id} />
+                <CorrectKmForm tripId={t.id} startKm={t.start_km} endKm={null} active />
               </div>
             ))}
           </div>
@@ -136,7 +156,7 @@ export default async function AdminRecordsPage({
           <tbody>
             {trips?.map((t) => (
               <Fragment key={t.id}>
-              <tr className={t.start_address || t.start_lat != null || t.end_lat != null ? "" : "border-b border-steel/10"}>
+              <tr>
                 <td className="px-3 py-2 text-ink">
                   {new Date(t.start_datetime).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short" })}
                 </td>
@@ -144,16 +164,31 @@ export default async function AdminRecordsPage({
                 <td className="px-3 py-2 text-ink">{t.vehicle?.name}</td>
                 <td className="odometer px-3 py-2 font-medium text-ink">
                   {t.kilometres_used != null ? t.kilometres_used.toLocaleString("en-NZ") : "—"}
+                  <span className="block text-[10px] font-normal text-steel">
+                    {t.start_km.toLocaleString("en-NZ")} → {t.end_km != null ? t.end_km.toLocaleString("en-NZ") : "…"}
+                  </span>
                 </td>
                 <td className="px-3 py-2 capitalize text-ink">{t.status}</td>
               </tr>
-              {(t.start_address || t.start_lat != null || t.end_lat != null) && (
-                <tr className="border-b border-steel/10">
-                  <td colSpan={5} className="px-3 pb-2 pt-0">
-                    <TripPlaces trip={t} />
-                  </td>
-                </tr>
-              )}
+              <tr className="border-b border-steel/10">
+                <td colSpan={5} className="px-3 pb-2 pt-0">
+                  <TripPlaces trip={t} />
+                  {gapById[t.id] != null && (
+                    <p className="mt-1 text-xs font-medium text-ink">
+                      <span className="rounded bg-amber/20 px-1.5 py-0.5">
+                        {gapById[t.id].toLocaleString("en-NZ")} KM not logged
+                      </span>{" "}
+                      <span className="text-steel">between the previous trip on this vehicle and this one.</span>
+                    </p>
+                  )}
+                  {t.kilometres_used != null && t.kilometres_used > KM_CAUTION_JUMP && (
+                    <p className="mt-1 text-xs font-medium text-rust">
+                      Unusually long trip ({t.kilometres_used.toLocaleString("en-NZ")} KM). Check for a typo.
+                    </p>
+                  )}
+                  <CorrectKmForm tripId={t.id} startKm={t.start_km} endKm={t.end_km} active={t.status === "active"} />
+                </td>
+              </tr>
               </Fragment>
             ))}
             {(!trips || trips.length === 0) && (
