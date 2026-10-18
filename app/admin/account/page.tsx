@@ -7,6 +7,7 @@ import OrganisationCard from "./OrganisationCard";
 import FeatureTogglesCard from "./FeatureTogglesCard";
 import ReceiptSettingsCard from "./ReceiptSettingsCard";
 import StorageUsageCard from "./StorageUsageCard";
+import DeleteOrganisationCard from "./DeleteOrganisationCard";
 import { isEmailConfigured } from "@/lib/email";
 import { normaliseFeatures } from "@/lib/orgFeatures";
 import { getCurrentUser } from "@/lib/supabase/current";
@@ -84,6 +85,10 @@ export default async function AdminAccountPage() {
 
       <div className="mt-4 max-w-sm">
         <PushSubscribeButton />
+      </div>
+
+      <div className="mt-8 max-w-sm">
+        <DeleteOrganisationCard organisationName={organisationName ?? ""} />
       </div>
     </div>
   );

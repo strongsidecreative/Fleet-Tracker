@@ -4,6 +4,7 @@ import { shrinkImageInput } from "@/lib/shrinkImage";
 import { useFormState, useFormStatus } from "react-dom";
 import { useState } from "react";
 import { updateVehicle } from "../actions";
+import VehicleComplianceFields from "../VehicleComplianceFields";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -113,106 +114,7 @@ export default function EditVehicleForm({ vehicle }: { vehicle: any }) {
         </p>
       </div>
 
-      <div className="border-t border-steel/10 pt-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-steel">Compliance</p>
-        <div className="space-y-3">
-          <div>
-            <label htmlFor="wofDue" className="mb-1 block text-xs font-medium text-steel">
-              WOF expiry date
-            </label>
-            <input
-              id="wofDue"
-              name="wofDue"
-              type="date"
-              defaultValue={vehicle.wof_due ?? ""}
-              className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="regoDue" className="mb-1 block text-xs font-medium text-steel">
-              Registration expiry date
-            </label>
-            <input
-              id="regoDue"
-              name="regoDue"
-              type="date"
-              defaultValue={vehicle.rego_due ?? ""}
-              className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="ruc" className="mb-1 block text-xs font-medium text-steel">
-              RUC purchased-to (KM) <span className="font-normal">— optional</span>
-            </label>
-            <input
-              id="ruc"
-              name="ruc"
-              inputMode="numeric"
-              defaultValue={vehicle.ruc_purchased_to_km ?? ""}
-              placeholder="e.g. 90000"
-              className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-steel/10 pt-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-steel">
-          Servicing — set a KM figure, a date, or both. Whichever comes first counts.
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label htmlFor="serviceDueKm" className="mb-1 block text-xs font-medium text-steel">
-              Next service due (KM)
-            </label>
-            <input
-              id="serviceDueKm"
-              name="serviceDueKm"
-              inputMode="numeric"
-              defaultValue={vehicle.service_due_km ?? ""}
-              className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="serviceDueDate" className="mb-1 block text-xs font-medium text-steel">
-              Next service due (date)
-            </label>
-            <input
-              id="serviceDueDate"
-              name="serviceDueDate"
-              type="date"
-              defaultValue={vehicle.service_due_date ?? ""}
-              className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="lastServiceDate" className="mb-1 block text-xs font-medium text-steel">
-                Last service date
-              </label>
-              <input
-                id="lastServiceDate"
-                name="lastServiceDate"
-                type="date"
-                defaultValue={vehicle.last_service_date ?? ""}
-                className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="lastServiceOdometer" className="mb-1 block text-xs font-medium text-steel">
-                Last service KM
-              </label>
-              <input
-                id="lastServiceOdometer"
-                name="lastServiceOdometer"
-                inputMode="numeric"
-                defaultValue={vehicle.last_service_odometer ?? ""}
-                className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+      <VehicleComplianceFields vehicle={vehicle} />
 
       <label className="flex items-center gap-2 text-sm text-ink">
         <input type="checkbox" name="active" defaultChecked={vehicle.active} className="h-4 w-4" />

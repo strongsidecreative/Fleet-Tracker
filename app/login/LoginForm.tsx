@@ -8,6 +8,7 @@ export default function LoginForm({ next = null }: { next?: string | null }) {
   const searchParams = useSearchParams();
   const justSetUp = searchParams.get("setup") === "success";
   const serverError = searchParams.get("error") === "server";
+  const orgDeleted = searchParams.get("deleted") === "1";
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
@@ -61,6 +62,12 @@ export default function LoginForm({ next = null }: { next?: string | null }) {
         {serverError && (
           <p className="mb-4 rounded-lg border border-rust/40 bg-rust/10 px-4 py-3 text-sm font-medium text-rust">
             You signed in, but the app couldn&apos;t load your account details just now. Please try again in a moment. If it keeps happening, let your fleet admin know.
+          </p>
+        )}
+
+        {orgDeleted && (
+          <p className="mb-4 rounded-lg border border-steel/30 bg-white px-4 py-3 text-sm font-medium text-ink">
+            Your organisation and all of its accounts and records have been permanently deleted.
           </p>
         )}
 

@@ -1,0 +1,1775 @@
+From 0b172b81e5a33124edb59eae7529a0d0b7299e71 Mon Sep 17 00:00:00 2001
+From: Tamati Taylor <strongsidecreative@protonmail.com>
+Date: Sat, 10 Oct 2026 02:03:31 +0000
+Subject: [PATCH] Fix everything from the 2026-10-10 full function audit
+
+Database (migration 0021, must be applied before deploying this):
+- Ending a trip no longer fails when a vehicle has a compliance alert due;
+  alerts set organisation_id and only go to that org's admins; daily
+  sweep checks RUC/service-km again
+- Driver-finished and admin-closed trips update the vehicle odometer;
+  catch-up for odometers that fell behind
+- Booking lock now sees other drivers' approved bookings; new
+  current_vehicle_reservation() for the vehicle page
+- Editing an approved booking works again (resubmit notification org)
+- fuel_logs scoped to the organisation; stale unscoped 0003 booking
+  policies dropped; trips can't start on another org's vehicle
+- notify_booking_driver(): drivers get approve/decline/override pushes
+- is_admin() requires an active admin
+
+App:
+- Booking times parsed as NZ time (server is UTC); edit form shows NZ time
+- Week/month/report boundaries at NZ midnight; reports include admin-
+  closed trips
+- Photos shrunk in the browser before upload; 4 MB action limit
+- QR scan while logged out returns to that vehicle after sign-in
+- Admin deactivate blocks login; can't deactivate self or last admin
+- Edit Vehicle can change name, rego, make, model
+- No more silent "success" on no-op updates (finish trip, cancel booking,
+  admin cancel, override, incident status, vehicle edit, booking edit)
+- Fuel $/L only uses fill-ups with litres; lighter driver home query
+- Failed setup/invite cleans up the half-created login
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Qhnmc5avadAHspa5AWMbxX
+---
+ .../bookings/[id]/edit/EditBookingForm.tsx    |  10 +-
+ app/(driver)/bookings/actions.ts              |  59 ++--
+ app/(driver)/bookings/new/NewBookingForm.tsx  |   3 +-
+ app/(driver)/bookings/page.tsx                |   6 +-
+ app/(driver)/fuel/AddFuelPanel.tsx            |   6 +-
+ app/(driver)/page.tsx                         |  17 +-
+ app/(driver)/trips/page.tsx                   |   2 +-
+ app/(driver)/vehicle-check/CheckForm.tsx      |   7 +-
+ .../vehicle/[qr_identifier]/actions.ts        |  10 +-
+ .../[qr_identifier]/overrideActions.ts        |  28 +-
+ app/(driver)/vehicle/[qr_identifier]/page.tsx |  46 ++-
+ app/admin/bookings/actions.ts                 |  55 +--
+ app/admin/drivers/[id]/page.tsx               |   2 +-
+ app/admin/drivers/new/actions.ts              |   7 +-
+ app/admin/fuel/export/route.ts                |   5 +-
+ app/admin/fuel/page.tsx                       |   8 +-
+ app/admin/incidents/actions.ts                |   6 +-
+ app/admin/page.tsx                            |   2 +-
+ app/admin/people/page.tsx                     |   2 +-
+ app/admin/reports/export/route.ts             |   7 +-
+ app/admin/reports/page.tsx                    |  26 +-
+ app/admin/reports/view/page.tsx               |  11 +-
+ app/admin/users/actions.ts                    |  58 ++-
+ app/admin/vehicles/[id]/EditVehicleForm.tsx   |  51 +++
+ app/admin/vehicles/actions.ts                 |  23 +-
+ app/login/LoginForm.tsx                       |   8 +-
+ app/login/page.tsx                            |  14 +-
+ app/setup/actions.ts                          |   6 +-
+ lib/bookingNotify.ts                          |  24 ++
+ lib/bookingRecurrence.ts                      |  28 +-
+ lib/nz-time.ts                                |  87 ++++-
+ lib/shrinkImage.ts                            |  41 +++
+ middleware.ts                                 |   7 +
+ next.config.js                                |   7 +
+ supabase/migrations/0021_audit_fixes.sql      | 329 ++++++++++++++++++
+ 35 files changed, 857 insertions(+), 151 deletions(-)
+ create mode 100644 lib/bookingNotify.ts
+ create mode 100644 lib/shrinkImage.ts
+ create mode 100644 supabase/migrations/0021_audit_fixes.sql
+
+diff --git a/app/(driver)/bookings/[id]/edit/EditBookingForm.tsx b/app/(driver)/bookings/[id]/edit/EditBookingForm.tsx
+index 936c0d5..ee3c0a6 100644
+--- a/app/(driver)/bookings/[id]/edit/EditBookingForm.tsx
++++ b/app/(driver)/bookings/[id]/edit/EditBookingForm.tsx
+@@ -3,6 +3,7 @@
+ import { useFormState, useFormStatus } from "react-dom";
+ import { useState } from "react";
+ import { editBooking } from "../../actions";
++import { nzDateInputValue, nzTimeInputValue } from "@/lib/nz-time";
+ 
+ function SubmitButton() {
+   const { pending } = useFormStatus();
+@@ -21,10 +22,11 @@ export default function EditBookingForm({ booking, vehicles }: { booking: any; v
+   const boundAction = editBooking.bind(null, booking.id);
+   const [state, formAction] = useFormState(boundAction, { error: null });
+ 
+-  const start = new Date(booking.start_datetime);
+-  const end = new Date(booking.end_datetime);
+-  const toDateInput = (d: Date) => d.toISOString().slice(0, 10);
+-  const toTimeInput = (d: Date) => d.toTimeString().slice(0, 5);
++  // Shown in NZ time, the same zone the server parses them back in.
++  const start = booking.start_datetime as string;
++  const end = booking.end_datetime as string;
++  const toDateInput = nzDateInputValue;
++  const toTimeInput = nzTimeInputValue;
+ 
+   const [vehicleId, setVehicleId] = useState(booking.vehicle_id ?? "");
+   const [vehicleRequired, setVehicleRequired] = useState(booking.vehicle_required);
+diff --git a/app/(driver)/bookings/actions.ts b/app/(driver)/bookings/actions.ts
+index 8496254..1900d4b 100644
+--- a/app/(driver)/bookings/actions.ts
++++ b/app/(driver)/bookings/actions.ts
+@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
+ import { redirect } from "next/navigation";
+ import { revalidatePath } from "next/cache";
+ import { generateOccurrenceDates, type RecurrencePattern } from "@/lib/bookingRecurrence";
++import { nzLocalToDate } from "@/lib/nz-time";
+ 
+ type ActionState = { error: string | null };
+ 
+@@ -33,8 +34,10 @@ export async function createBookingRequest(prevState: ActionState, formData: For
+     return { error: "Please select an admin to approve this request." };
+   }
+ 
+-  const firstStart = new Date(`${date}T${startTime}`);
+-  const firstEnd = new Date(`${date}T${endTime}`);
++  // Times are typed in NZ time; the server runs in UTC, so parse them
++  // explicitly as Pacific/Auckland (see nzLocalToDate).
++  const firstStart = nzLocalToDate(date, startTime);
++  const firstEnd = nzLocalToDate(date, endTime);
+   if (firstEnd <= firstStart) {
+     return { error: "End time must be after the start time." };
+   }
+@@ -88,8 +91,8 @@ export async function createBookingRequest(prevState: ActionState, formData: For
+     vehicle_required: vehicleRequired,
+     driver_id: user!.id,
+     created_by: user!.id,
+-    start_datetime: new Date(`${occDate}T${startTime}`).toISOString(),
+-    end_datetime: new Date(`${occDate}T${endTime}`).toISOString(),
++    start_datetime: nzLocalToDate(occDate, startTime).toISOString(),
++    end_datetime: nzLocalToDate(occDate, endTime).toISOString(),
+     notes,
+     approval_status: "pending",
+     booking_status: "upcoming",
+@@ -129,18 +132,19 @@ export async function editBooking(bookingId: string, prevState: ActionState, for
+   if (!vehicleId && !vehicleRequired) return { error: "Please choose a vehicle, or mark it as To Be Assigned." };
+   if (!date || !startTime || !endTime) return { error: "Please fill in the date and start/end times." };
+ 
+-  const newStart = new Date(`${date}T${startTime}`);
+-  const newEnd = new Date(`${date}T${endTime}`);
++  const newStart = nzLocalToDate(date, startTime);
++  const newEnd = nzLocalToDate(date, endTime);
+   if (newEnd <= newStart) return { error: "End time must be after the start time." };
++  if (newEnd < new Date()) return { error: "That time has already passed. Please choose a future date." };
+ 
+   const materialChange =
+     vehicleId !== booking.vehicle_id ||
+-    newStart.toISOString() !== booking.start_datetime ||
+-    newEnd.toISOString() !== booking.end_datetime;
++    newStart.getTime() !== new Date(booking.start_datetime).getTime() ||
++    newEnd.getTime() !== new Date(booking.end_datetime).getTime();
+ 
+   const wasApproved = booking.approval_status === "approved";
+ 
+-  const { error } = await supabase
++  const { data: updated, error } = await supabase
+     .from("bookings")
+     .update({
+       title,
+@@ -154,7 +158,12 @@ export async function editBooking(bookingId: string, prevState: ActionState, for
+         : {}),
+     })
+     .eq("id", bookingId)
+-    .eq("driver_id", user!.id);
++    .eq("driver_id", user!.id)
++    .select("id");
++
++  if (!error && (!updated || updated.length === 0)) {
++    return { error: "This booking couldn't be updated. It may have just been changed by an admin. Please refresh and try again." };
++  }
+ 
+   if (error) {
+     if (error.code === "23P01") {
+@@ -174,26 +183,28 @@ export async function cancelBooking(bookingId: string, scope: string) {
+   const {
+     data: { user },
+   } = await supabase.auth.getUser();
++  if (!user) redirect("/login");
+ 
+   const { data: booking } = await supabase.from("bookings").select("*").eq("id", bookingId).single();
+-  if (!booking || booking.driver_id !== user!.id) return;
++  if (!booking || booking.driver_id !== user!.id) {
++    redirect(`/bookings?error=${encodeURIComponent("That booking couldn't be found.")}`);
++  }
+ 
++  let query = supabase.from("bookings").update({ booking_status: "cancelled" }).eq("driver_id", user!.id);
+   if (scope === "this" || !booking.series_id) {
+-    await supabase.from("bookings").update({ booking_status: "cancelled" }).eq("id", bookingId).eq("driver_id", user!.id);
++    query = query.eq("id", bookingId);
+   } else if (scope === "future") {
+-    await supabase
+-      .from("bookings")
+-      .update({ booking_status: "cancelled" })
+-      .eq("series_id", booking.series_id)
+-      .eq("driver_id", user!.id)
+-      .gte("start_datetime", booking.start_datetime);
+-  } else if (scope === "series") {
+-    await supabase
+-      .from("bookings")
+-      .update({ booking_status: "cancelled" })
+-      .eq("series_id", booking.series_id)
+-      .eq("driver_id", user!.id);
++    query = query.eq("series_id", booking.series_id).gte("start_datetime", booking.start_datetime);
++  } else {
++    query = query.eq("series_id", booking.series_id);
+   }
+ 
++  // RLS turns a blocked update into "0 rows, no error", so check rows came back.
++  const { data: cancelled, error } = await query.select("id");
++
+   revalidatePath("/bookings");
++  if (error || !cancelled || cancelled.length === 0) {
++    redirect(`/bookings?error=${encodeURIComponent("Something went wrong cancelling this booking. Please try again.")}`);
++  }
++  redirect(`/bookings?success=${encodeURIComponent(cancelled.length > 1 ? `${cancelled.length} bookings cancelled` : "Booking cancelled")}`);
+ }
+diff --git a/app/(driver)/bookings/new/NewBookingForm.tsx b/app/(driver)/bookings/new/NewBookingForm.tsx
+index aadeeaf..05f1837 100644
+--- a/app/(driver)/bookings/new/NewBookingForm.tsx
++++ b/app/(driver)/bookings/new/NewBookingForm.tsx
+@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
+ import { useMemo, useState } from "react";
+ import { createBookingRequest } from "../actions";
+ import { generateOccurrenceDates, dayLabel, type RecurrencePattern } from "@/lib/bookingRecurrence";
++import { nzToday } from "@/lib/nz-time";
+ 
+ function SubmitButton({ disabled }: { disabled: boolean }) {
+   const { pending } = useFormStatus();
+@@ -129,7 +130,7 @@ export default function NewBookingForm({
+           name="date"
+           value={date}
+           onChange={(e) => setDate(e.target.value)}
+-          min={new Date().toISOString().slice(0, 10)}
++          min={nzToday()}
+           required
+           className="w-full rounded-lg border border-steel/30 px-4 py-3 text-base focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand"
+         />
+diff --git a/app/(driver)/bookings/page.tsx b/app/(driver)/bookings/page.tsx
+index 851401b..a6f5ca4 100644
+--- a/app/(driver)/bookings/page.tsx
++++ b/app/(driver)/bookings/page.tsx
+@@ -3,14 +3,15 @@ import Link from "next/link";
+ import { cancelBooking } from "./actions";
+ import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+ import SuccessBanner from "@/components/SuccessBanner";
++import ErrorBanner from "@/components/ErrorBanner";
++import { isTodayNZ } from "@/lib/nz-time";
+ import { getCurrentUser } from "@/lib/supabase/current";
+ 
+ function fmtRange(start: string, end: string) {
+   const s = new Date(start);
+   const e = new Date(end);
+-  const today = new Date();
+   const dayLabel =
+-    s.toDateString() === today.toDateString()
++    isTodayNZ(s)
+       ? "Today"
+       : s.toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short" });
+   return `${dayLabel} ${s.toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString("en-NZ", { timeZone: "Pacific/Auckland", hour: "numeric", minute: "2-digit" })}`;
+@@ -108,6 +109,7 @@ export default async function DriverBookingsPage() {
+   return (
+     <div>
+       <SuccessBanner />
++      <ErrorBanner />
+       <div className="mb-4 flex items-center justify-between">
+         <h1 className="font-display text-xl font-bold text-ink">My Bookings</h1>
+         <Link href="/bookings/new" className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-paper">
+diff --git a/app/(driver)/fuel/AddFuelPanel.tsx b/app/(driver)/fuel/AddFuelPanel.tsx
+index 34c1340..0510d9c 100644
+--- a/app/(driver)/fuel/AddFuelPanel.tsx
++++ b/app/(driver)/fuel/AddFuelPanel.tsx
+@@ -1,5 +1,6 @@
+ "use client";
+ 
++import { shrinkImageInput } from "@/lib/shrinkImage";
+ import { useEffect, useRef, useState } from "react";
+ import { useFormState, useFormStatus } from "react-dom";
+ import { logFuel } from "./actions";
+@@ -94,7 +95,10 @@ export default function AddFuelPanel({ vehicleId, tripId }: { vehicleId: string;
+           accept="image/*"
+           capture="environment"
+           required
+-          onChange={(e) => setReceiptName(e.target.files?.[0]?.name ?? null)}
++          onChange={(e) => {
++            setReceiptName(e.target.files?.[0]?.name ?? null);
++            void shrinkImageInput(e.currentTarget);
++          }}
+           className="w-full text-xs text-steel"
+         />
+       </div>
+diff --git a/app/(driver)/page.tsx b/app/(driver)/page.tsx
+index b419ce1..2fb1358 100644
+--- a/app/(driver)/page.tsx
++++ b/app/(driver)/page.tsx
+@@ -18,7 +18,7 @@ export default async function DriverDashboard({
+   // Everything in one parallel batch (previously profile first, then the
+   // rest): the profile is shared with the layout via React cache, and the
+   // admin redirect below only needs it after the fact.
+-  const [profile, { data: activeTrip }, { data: completedTrips }, features] = await Promise.all([
++  const [profile, { data: activeTrip }, { data: completedTrips }, { data: recentTrips }, features] = await Promise.all([
+     getMyProfile(),
+     supabase
+       .from("vehicle_usage")
+@@ -26,12 +26,21 @@ export default async function DriverDashboard({
+       .eq("driver_id", user!.id)
+       .eq("status", "active")
+       .maybeSingle(),
++    // Two light columns for the KM totals (every finished trip), and the
++    // full rows only for the five shown in "Recent", instead of loading
++    // every trip with its vehicle on every visit.
++    supabase
++      .from("vehicle_usage")
++      .select("start_datetime, kilometres_used")
++      .eq("driver_id", user!.id)
++      .in("status", ["completed", "corrected"]),
+     supabase
+       .from("vehicle_usage")
+       .select("*, vehicle:vehicles(name)")
+       .eq("driver_id", user!.id)
+-      .eq("status", "completed")
+-      .order("start_datetime", { ascending: false }),
++      .in("status", ["completed", "corrected"])
++      .order("start_datetime", { ascending: false })
++      .limit(5),
+     // Vehicle Check / Report an Incident below are only shown when this
+     // organisation's admin hasn't switched them off — middleware.ts is
+     // what actually blocks the pages if someone still has an old link.
+@@ -55,7 +64,7 @@ export default async function DriverDashboard({
+   const weekKm = weekTrips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
+   const monthKm = monthTrips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
+   const totalKm = trips.reduce((s, t) => s + (t.kilometres_used ?? 0), 0);
+-  const recent = trips.slice(0, 5);
++  const recent = recentTrips ?? [];
+ 
+   return (
+     <div className="space-y-5">
+diff --git a/app/(driver)/trips/page.tsx b/app/(driver)/trips/page.tsx
+index 6f88472..1aefbbd 100644
+--- a/app/(driver)/trips/page.tsx
++++ b/app/(driver)/trips/page.tsx
+@@ -9,7 +9,7 @@ export default async function MyTripsPage() {
+     .from("vehicle_usage")
+     .select("*, vehicle:vehicles(name)")
+     .eq("driver_id", user!.id)
+-    .eq("status", "completed")
++    .in("status", ["completed", "corrected"])
+     .order("start_datetime", { ascending: false });
+ 
+   return (
+diff --git a/app/(driver)/vehicle-check/CheckForm.tsx b/app/(driver)/vehicle-check/CheckForm.tsx
+index 245b475..76f330c 100644
+--- a/app/(driver)/vehicle-check/CheckForm.tsx
++++ b/app/(driver)/vehicle-check/CheckForm.tsx
+@@ -1,5 +1,6 @@
+ "use client";
+ 
++import { shrinkImageInput } from "@/lib/shrinkImage";
+ import { useFormState, useFormStatus } from "react-dom";
+ import { useState } from "react";
+ import { submitVehicleCheck } from "./actions";
+@@ -156,7 +157,11 @@ export default function CheckForm({
+                       type="file"
+                       name={`photo_${item.key}`}
+                       accept="image/*"
+-                      onChange={(e) => updateItem(item.key, { photoName: e.target.files?.[0]?.name ?? null })}
++                      onChange={(e) => {
++                        updateItem(item.key, { photoName: e.target.files?.[0]?.name ?? null });
++                        // Smaller than other uploads: a check can carry several photos in one request.
++                        void shrinkImageInput(e.currentTarget, 1280, 0.72);
++                      }}
+                       className="w-full text-xs text-steel"
+                     />
+                   </div>
+diff --git a/app/(driver)/vehicle/[qr_identifier]/actions.ts b/app/(driver)/vehicle/[qr_identifier]/actions.ts
+index ec47e8c..98c0d66 100644
+--- a/app/(driver)/vehicle/[qr_identifier]/actions.ts
++++ b/app/(driver)/vehicle/[qr_identifier]/actions.ts
+@@ -68,6 +68,7 @@ export async function startTrip(
+     // written to be human-readable (odometer check, booking lock).
+     // Constraint violations fall back to a generic friendly message.
+     if (error.message.includes("Starting KM")) return { error: error.message };
++    if (error.message.includes("could not be found")) return { error: "That vehicle couldn't be found. Please scan it again." };
+     if (error.message.includes("booked by another driver")) return { error: error.message };
+     if (error.code === "23505") {
+       return { error: "This vehicle just became unavailable, or you already have a trip active. Please refresh and try again." };
+@@ -102,7 +103,7 @@ export async function finishTrip(
+     return { error: "Please enter the kilometre reading shown on the vehicle." };
+   }
+ 
+-  const { error } = await supabase
++  const { data: finished, error } = await supabase
+     .from("vehicle_usage")
+     .update({
+       end_km: km,
+@@ -111,7 +112,12 @@ export async function finishTrip(
+     })
+     .eq("id", tripId)
+     .eq("driver_id", user.id)
+-    .eq("status", "active");
++    .eq("status", "active")
++    .select("id");
++
++  if (!error && (!finished || finished.length === 0)) {
++    return { error: "This trip has already been finished (an admin may have closed it). Refresh to see the latest." };
++  }
+ 
+   if (error) {
+     if (error.message.includes("end_km_not_below_start")) {
+diff --git a/app/(driver)/vehicle/[qr_identifier]/overrideActions.ts b/app/(driver)/vehicle/[qr_identifier]/overrideActions.ts
+index e65a84a..7018719 100644
+--- a/app/(driver)/vehicle/[qr_identifier]/overrideActions.ts
++++ b/app/(driver)/vehicle/[qr_identifier]/overrideActions.ts
+@@ -2,23 +2,30 @@
+ 
+ import { createClient } from "@/lib/supabase/server";
+ import { revalidatePath } from "next/cache";
++import { notifyDriver } from "@/lib/bookingNotify";
+ 
+ export async function overrideBooking(bookingId: string, reason: string) {
+   const supabase = createClient();
+   const {
+     data: { user },
+   } = await supabase.auth.getUser();
++  if (!user) return;
+ 
+-  const { data: profile } = await supabase.from("profiles").select("role, name").eq("id", user!.id).single();
++  const { data: profile } = await supabase.from("profiles").select("role, name").eq("id", user.id).single();
+   if (profile?.role !== "admin") return;
+ 
+   const { data: booking } = await supabase.from("bookings").select("*, vehicle:vehicles(name)").eq("id", bookingId).single();
+   if (!booking) return;
+ 
+-  await supabase.from("bookings").update({ booking_status: "cancelled" }).eq("id", bookingId);
++  const { data: cancelled } = await supabase
++    .from("bookings")
++    .update({ booking_status: "cancelled" })
++    .eq("id", bookingId)
++    .select("id");
++  if (!cancelled || cancelled.length === 0) return;
+ 
+   await supabase.from("audit_log").insert({
+-    user_id: user!.id,
++    user_id: user.id,
+     record_type: "bookings",
+     record_id: bookingId,
+     action: "booking_override",
+@@ -26,13 +33,12 @@ export async function overrideBooking(bookingId: string, reason: string) {
+     new_value: { booking_status: "cancelled", reason },
+   });
+ 
+-  await supabase.from("notifications").insert({
+-    recipient_id: booking.driver_id,
+-    type: "booking_override",
+-    message: `${profile?.name} overrode your booking on ${booking.vehicle?.name}${reason ? `: ${reason}` : ""}`,
+-    related_table: "bookings",
+-    related_id: bookingId,
+-  });
++  await notifyDriver(
++    supabase,
++    bookingId,
++    "booking_override",
++    `${profile?.name} overrode your booking on ${booking.vehicle?.name}${reason ? `: ${reason}` : ""}`
++  );
+ 
+-  revalidatePath(`/vehicle`);
++  revalidatePath("/", "layout");
+ }
+diff --git a/app/(driver)/vehicle/[qr_identifier]/page.tsx b/app/(driver)/vehicle/[qr_identifier]/page.tsx
+index 3d3df78..f53ed26 100644
+--- a/app/(driver)/vehicle/[qr_identifier]/page.tsx
++++ b/app/(driver)/vehicle/[qr_identifier]/page.tsx
+@@ -6,6 +6,37 @@ import { getViewerFeatures } from "@/lib/orgFeatures.server";
+ import { isComplianceCheckDayNZ, isTodayNZ } from "@/lib/nz-time";
+ import { getCurrentUser } from "@/lib/supabase/current";
+ 
++type Reservation = { id: string; driver_id: string; end_datetime: string; driver: { name: string | null } | null };
++
++async function getCurrentReservation(
++  supabase: ReturnType<typeof createClient>,
++  vehicleId: string,
++  nowIso: string
++): Promise<{ data: Reservation | null }> {
++  const { data, error } = await supabase.rpc("current_vehicle_reservation", { p_vehicle_id: vehicleId });
++  if (!error) {
++    const row = (Array.isArray(data) ? data[0] : data) as
++      | { id: string; driver_id: string; driver_name: string | null; end_datetime: string }
++      | undefined;
++    return {
++      data: row ? { id: row.id, driver_id: row.driver_id, end_datetime: row.end_datetime, driver: { name: row.driver_name } } : null,
++    };
++  }
++  // Function not deployed yet: fall back to the old direct query (only
++  // sees the viewer's own bookings, or all of them for an admin).
++  const { data: own } = await supabase
++    .from("bookings")
++    .select("id, driver_id, end_datetime, driver:profiles(name)")
++    .eq("vehicle_id", vehicleId)
++    .eq("approval_status", "approved")
++    .in("booking_status", ["upcoming", "active"])
++    .lte("start_datetime", nowIso)
++    .gte("end_datetime", nowIso)
++    .limit(1)
++    .maybeSingle();
++  return { data: (own as unknown as Reservation | null) ?? null };
++}
++
+ export default async function VehiclePage({ params }: { params: { qr_identifier: string } }) {
+   const supabase = createClient();
+ 
+@@ -61,16 +92,11 @@ export default async function VehiclePage({ params }: { params: { qr_identifier:
+       .neq("vehicle_id", vehicle.id)
+       .maybeSingle(),
+     // Only an APPROVED booking reserves the vehicle — a pending request
+-    // never blocks anyone, per the approval workflow.
+-    supabase
+-      .from("bookings")
+-      .select("*, driver:profiles(name)")
+-      .eq("vehicle_id", vehicle.id)
+-      .eq("approval_status", "approved")
+-      .in("booking_status", ["upcoming", "active"])
+-      .lte("start_datetime", nowIso)
+-      .gte("end_datetime", nowIso)
+-      .maybeSingle(),
++    // never blocks anyone, per the approval workflow. Read through a
++    // database function (migration 0021) because RLS only lets a driver
++    // see their OWN bookings, so a plain query never saw another
++    // driver's reservation.
++    getCurrentReservation(supabase, vehicle.id, nowIso),
+     // Fetched unconditionally alongside everything else (cheap, and its
+     // own result isn't needed to decide whether to run it) — only used
+     // below if this org actually has Vehicle Checks turned on.
+diff --git a/app/admin/bookings/actions.ts b/app/admin/bookings/actions.ts
+index 3ee2dd2..b3185d8 100644
+--- a/app/admin/bookings/actions.ts
++++ b/app/admin/bookings/actions.ts
+@@ -2,6 +2,7 @@
+ 
+ import { createClient } from "@/lib/supabase/server";
+ import { revalidatePath } from "next/cache";
++import { notifyDriver } from "@/lib/bookingNotify";
+ 
+ type Conflict = { date: string; vehicleName: string; requestedTime: string; existingTime: string; existingDriver: string };
+ type ActionState = { error: string | null; conflicts?: Conflict[] };
+@@ -90,13 +91,12 @@ export async function approveBooking(bookingId: string, prevState: ActionState,
+     return { error: "Something went wrong approving this booking. Please try again." };
+   }
+ 
+-  await supabase.from("notifications").insert({
+-    recipient_id: booking.driver_id,
+-    type: "booking_approved",
+-    message: `${booking.title || "Booking"} approved${booking.series_id ? ` (${rows.length} occurrences)` : ""}${note ? `: ${note}` : ""}`,
+-    related_table: "bookings",
+-    related_id: booking.id,
+-  });
++  await notifyDriver(
++    supabase,
++    booking.id,
++    "booking_approved",
++    `${booking.title || "Booking"} approved${booking.series_id ? ` (${rows.length} occurrences)` : ""}${note ? `: ${note}` : ""}`
++  );
+ 
+   await supabase.from("audit_log").insert({
+     user_id: user!.id,
+@@ -140,16 +140,9 @@ export async function declineBooking(bookingId: string, prevState: ActionState,
+   const { error } = await query;
+   if (error) return { error: "Something went wrong declining this booking. Please try again." };
+ 
+-  await supabase.from("notifications").insert({
+-    recipient_id: booking.driver_id,
+-    // Declining a pending request and cancelling an approved one are the same
+-    // event from the driver's point of view — declining is what cancels the
+-    // booking, so both are notified as "declined".
+-    type: "booking_declined",
+-    message: `${booking.title || "Booking"} declined${note ? `: ${note}` : ""}`,
+-    related_table: "bookings",
+-    related_id: booking.id,
+-  });
++  // Declining a pending request and cancelling an approved one are the same
++  // event from the driver's point of view, so both are notified as "declined".
++  await notifyDriver(supabase, booking.id, "booking_declined", `${booking.title || "Booking"} declined${note ? `: ${note}` : ""}`);
+ 
+   await supabase.from("audit_log").insert({
+     user_id: user!.id,
+@@ -167,19 +160,27 @@ export async function declineBooking(bookingId: string, prevState: ActionState,
+ 
+ export async function adminCancelBooking(bookingId: string) {
+   const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++  if (!user) return;
++
++  const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
++  if (callerProfile?.role !== "admin") return;
+ 
+   const { data: booking } = await supabase.from("bookings").select("*").eq("id", bookingId).single();
+-  await supabase.from("bookings").update({ booking_status: "cancelled" }).eq("id", bookingId);
+-
+-  if (booking) {
+-    await supabase.from("notifications").insert({
+-      recipient_id: booking.driver_id,
+-      type: "booking_declined",
+-      message: `${booking.title || "Booking"} declined by an admin`,
+-      related_table: "bookings",
+-      related_id: booking.id,
+-    });
++  if (!booking) return;
++
++  const { data: cancelled } = await supabase
++    .from("bookings")
++    .update({ booking_status: "cancelled" })
++    .eq("id", bookingId)
++    .select("id");
++
++  if (cancelled && cancelled.length > 0) {
++    await notifyDriver(supabase, booking.id, "booking_declined", `${booking.title || "Booking"} declined by an admin`);
+   }
+ 
+   revalidatePath("/admin/bookings");
++  revalidatePath("/bookings");
+ }
+diff --git a/app/admin/drivers/[id]/page.tsx b/app/admin/drivers/[id]/page.tsx
+index 4d2a3bc..cd29d68 100644
+--- a/app/admin/drivers/[id]/page.tsx
++++ b/app/admin/drivers/[id]/page.tsx
+@@ -14,7 +14,7 @@ export default async function DriverDetailPage({ params }: { params: { id: strin
+       .from("vehicle_usage")
+       .select("*, vehicle:vehicles(name)")
+       .eq("driver_id", params.id)
+-      .eq("status", "completed")
++      .in("status", ["completed", "corrected"])
+       .order("start_datetime", { ascending: false }),
+   ]);
+ 
+diff --git a/app/admin/drivers/new/actions.ts b/app/admin/drivers/new/actions.ts
+index 0bc304e..b131957 100644
+--- a/app/admin/drivers/new/actions.ts
++++ b/app/admin/drivers/new/actions.ts
+@@ -43,7 +43,10 @@ async function inviteAndCreateProfile(
+   });
+ 
+   if (profileError) {
+-    return { error: "The invite was sent, but creating the profile failed. Please contact support." };
++    // Remove the half-created login so this email can be invited again.
++    // (The invite email already sent will just stop working.)
++    await adminClient.auth.admin.deleteUser(invited.user.id);
++    return { error: "Something went wrong creating this person's profile. Nothing was saved, so please try again." };
+   }
+ 
+   return { error: null };
+@@ -88,7 +91,7 @@ export async function createUser(role: "driver" | "admin", prevState: ActionStat
+   }
+ 
+   const name = (formData.get("name") as string)?.trim();
+-  const email = (formData.get("email") as string)?.trim();
++  const email = (formData.get("email") as string)?.trim().toLowerCase();
+ 
+   if (!name || !email) {
+     return { error: "Name and email are both required." };
+diff --git a/app/admin/fuel/export/route.ts b/app/admin/fuel/export/route.ts
+index 83647ba..8c81f5b 100644
+--- a/app/admin/fuel/export/route.ts
++++ b/app/admin/fuel/export/route.ts
+@@ -1,5 +1,6 @@
+ import { createClient } from "@/lib/supabase/server";
+ import { toCsv, csvResponse } from "@/lib/csv";
++import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+ 
+ export async function GET(request: Request) {
+   const { searchParams } = new URL(request.url);
+@@ -13,8 +14,8 @@ export async function GET(request: Request) {
+     .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
+     .order("created_at", { ascending: false });
+ 
+-  if (start) query = query.gte("created_at", `${start}T00:00:00`);
+-  if (end) query = query.lte("created_at", `${end}T23:59:59`);
++  if (start) query = query.gte("created_at", nzLocalToDate(start).toISOString());
++  if (end) query = query.lt("created_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString());
+   if (vehicleId) query = query.eq("vehicle_id", vehicleId);
+ 
+   const { data: logs } = await query;
+diff --git a/app/admin/fuel/page.tsx b/app/admin/fuel/page.tsx
+index e0d0b54..c46a5c1 100644
+--- a/app/admin/fuel/page.tsx
++++ b/app/admin/fuel/page.tsx
+@@ -17,9 +17,13 @@ export default async function AdminFuelPage({ searchParams }: { searchParams: {
+   const { data: logs } = await query;
+   const rows = logs ?? [];
+ 
+-  const totalLitres = rows.reduce((s, l) => s + l.litres, 0);
++  const totalLitres = rows.reduce((s, l) => s + (l.litres ?? 0), 0);
+   const totalCost = rows.reduce((s, l) => s + l.cost, 0);
+-  const avgPricePerLitre = totalLitres > 0 ? totalCost / totalLitres : 0;
++  // Litres is optional, so $/L only uses fill-ups that recorded litres;
++  // dividing ALL cost by only SOME litres overstated the price.
++  const withLitres = rows.filter((l) => l.litres != null && l.litres > 0);
++  const costWithLitres = withLitres.reduce((s, l) => s + l.cost, 0);
++  const avgPricePerLitre = totalLitres > 0 ? costWithLitres / totalLitres : 0;
+ 
+   return (
+     <div>
+diff --git a/app/admin/incidents/actions.ts b/app/admin/incidents/actions.ts
+index 349cc53..320b34e 100644
+--- a/app/admin/incidents/actions.ts
++++ b/app/admin/incidents/actions.ts
+@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
+ 
+ export async function updateIncidentStatus(incidentId: string, status: string) {
+   const supabase = createClient();
+-  await supabase.from("incident_reports").update({ status }).eq("id", incidentId);
++  if (!["new", "acknowledged", "resolved"].includes(status)) return;
++  const { data, error } = await supabase.from("incident_reports").update({ status }).eq("id", incidentId).select("id");
++  if (error || !data || data.length === 0) {
++    console.error("updateIncidentStatus changed nothing", incidentId, error?.message);
++  }
+   revalidatePath("/admin/incidents");
+ }
+diff --git a/app/admin/page.tsx b/app/admin/page.tsx
+index b148459..c6d334e 100644
+--- a/app/admin/page.tsx
++++ b/app/admin/page.tsx
+@@ -36,7 +36,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
+     supabase.from("notifications").select("*", { count: "exact", head: true }).eq("recipient_id", userId).eq("read", false),
+     supabase.from("vehicles").select("*").eq("active", true),
+     supabase.from("vehicle_usage").select("vehicle_id").eq("status", "active"),
+-    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "completed"),
++    supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").in("status", ["completed", "corrected"]),
+     supabase.from("profiles").select("id, name").eq("role", "driver"),
+   ]);
+ 
+diff --git a/app/admin/people/page.tsx b/app/admin/people/page.tsx
+index 221cac2..a855d48 100644
+--- a/app/admin/people/page.tsx
++++ b/app/admin/people/page.tsx
+@@ -120,7 +120,7 @@ export default async function AdminPeoplePage({
+     // Only the columns the KM totals below actually use — this table grows
+     // without bound over time, and previously pulled every column plus a
+     // vehicle-name join for every completed trip ever, just to sum numbers.
+-    supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").eq("status", "completed"),
++    supabase.from("vehicle_usage").select("driver_id, start_datetime, kilometres_used").in("status", ["completed", "corrected"]),
+     supabase.from("vehicle_usage").select("*, vehicle:vehicles(name)").eq("status", "active"),
+     supabase.from("driver_licences").select("*"),
+     pendingIdsPromise,
+diff --git a/app/admin/reports/export/route.ts b/app/admin/reports/export/route.ts
+index a50a722..641b180 100644
+--- a/app/admin/reports/export/route.ts
++++ b/app/admin/reports/export/route.ts
+@@ -1,5 +1,6 @@
+ import { createClient } from "@/lib/supabase/server";
+ import { toCsv, csvResponse } from "@/lib/csv";
++import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+ 
+ export async function GET(request: Request) {
+   const { searchParams } = new URL(request.url);
+@@ -14,9 +15,9 @@ export async function GET(request: Request) {
+   const { data: trips } = await supabase
+     .from("vehicle_usage")
+     .select("*, vehicle:vehicles(name, registration), driver:profiles(name)")
+-    .eq("status", "completed")
+-    .gte("start_datetime", `${start}T00:00:00`)
+-    .lte("start_datetime", `${end}T23:59:59`)
++    .in("status", ["completed", "corrected"])
++    .gte("start_datetime", nzLocalToDate(start).toISOString())
++    .lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString())
+     .order("start_datetime", { ascending: false });
+ 
+   const rows = (trips ?? []).map((t) => ({
+diff --git a/app/admin/reports/page.tsx b/app/admin/reports/page.tsx
+index 756f143..4c1428c 100644
+--- a/app/admin/reports/page.tsx
++++ b/app/admin/reports/page.tsx
+@@ -1,40 +1,36 @@
+ import Link from "next/link";
+-import { startOfWeekNZ, nzToday } from "@/lib/nz-time";
+-
+-function iso(d: Date) {
+-  return d.toISOString().slice(0, 10);
+-}
++import { startOfWeekNZDateString, addDaysToDateString, nzToday } from "@/lib/nz-time";
+ 
+ export default function ReportsIndexPage() {
+-  const thisWeekStart = startOfWeekNZ();
+-  const lastWeekStart = new Date(thisWeekStart);
+-  lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
+-  const lastWeekEnd = new Date(lastWeekStart);
+-  lastWeekEnd.setUTCDate(lastWeekStart.getUTCDate() + 6);
++  // Plain NZ calendar dates (YYYY-MM-DD); the view/export turn them into
++  // NZ-midnight boundaries.
++  const thisWeekStart = startOfWeekNZDateString();
++  const lastWeekStart = addDaysToDateString(thisWeekStart, -7);
++  const lastWeekEnd = addDaysToDateString(thisWeekStart, -1);
+ 
+   const today = nzToday();
+   const [ty, tm] = today.split("-").map(Number);
+-  const lastMonthEnd = new Date(Date.UTC(ty, tm - 1, 0));
+-  const lastMonthStart = new Date(Date.UTC(lastMonthEnd.getUTCFullYear(), lastMonthEnd.getUTCMonth(), 1));
++  const lastMonthEnd = new Date(Date.UTC(ty, tm - 1, 0)).toISOString().slice(0, 10);
++  const lastMonthStart = `${lastMonthEnd.slice(0, 7)}-01`;
+ 
+   return (
+     <div>
+       <h1 className="mb-4 font-display text-xl font-bold text-ink">Reports</h1>
+       <div className="space-y-2">
+         <Link
+-          href={`/admin/reports/view?start=${iso(thisWeekStart)}&end=${today}&label=This Week (so far)`}
++          href={`/admin/reports/view?start=${thisWeekStart}&end=${today}&label=This Week (so far)`}
+           className="block rounded-xl border border-steel/20 bg-white p-3 font-medium text-ink"
+         >
+           This Week (so far)
+         </Link>
+         <Link
+-          href={`/admin/reports/view?start=${iso(lastWeekStart)}&end=${iso(lastWeekEnd)}&label=Last Week`}
++          href={`/admin/reports/view?start=${lastWeekStart}&end=${lastWeekEnd}&label=Last Week`}
+           className="block rounded-xl border border-steel/20 bg-white p-3 font-medium text-ink"
+         >
+           Last Week
+         </Link>
+         <Link
+-          href={`/admin/reports/view?start=${iso(lastMonthStart)}&end=${iso(lastMonthEnd)}&label=Last Month`}
++          href={`/admin/reports/view?start=${lastMonthStart}&end=${lastMonthEnd}&label=Last Month`}
+           className="block rounded-xl border border-steel/20 bg-white p-3 font-medium text-ink"
+         >
+           Last Month
+diff --git a/app/admin/reports/view/page.tsx b/app/admin/reports/view/page.tsx
+index 67ea066..95d444a 100644
+--- a/app/admin/reports/view/page.tsx
++++ b/app/admin/reports/view/page.tsx
+@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
+ import { getViewerFeatures } from "@/lib/orgFeatures.server";
+ import BackButton from "@/components/BackButton";
+ import { getCurrentUser } from "@/lib/supabase/current";
++import { nzLocalToDate, addDaysToDateString } from "@/lib/nz-time";
+ 
+ export default async function ReportViewPage({
+   searchParams,
+@@ -23,15 +24,15 @@ export default async function ReportViewPage({
+     supabase
+       .from("vehicle_usage")
+       .select("*, vehicle:vehicles(name), driver:profiles(name)")
+-      .eq("status", "completed")
+-      .gte("start_datetime", `${start}T00:00:00`)
+-      .lte("start_datetime", `${end}T23:59:59`),
++      .in("status", ["completed", "corrected"])
++      .gte("start_datetime", nzLocalToDate(start).toISOString())
++      .lt("start_datetime", nzLocalToDate(addDaysToDateString(end, 1)).toISOString()),
+     features.fuel_tracking
+       ? supabase
+           .from("fuel_logs")
+           .select("*, vehicle:vehicles(name)")
+-          .gte("created_at", `${start}T00:00:00`)
+-          .lte("created_at", `${end}T23:59:59`)
++          .gte("created_at", nzLocalToDate(start).toISOString())
++          .lt("created_at", nzLocalToDate(addDaysToDateString(end, 1)).toISOString())
+       : Promise.resolve({ data: null as { vehicle_id: string; vehicle: { name: string } | null; litres: number; cost: number }[] | null }),
+   ]);
+ 
+diff --git a/app/admin/users/actions.ts b/app/admin/users/actions.ts
+index 8e2fae8..aec67f8 100644
+--- a/app/admin/users/actions.ts
++++ b/app/admin/users/actions.ts
+@@ -8,12 +8,68 @@ import { redirect } from "next/navigation";
+ import { randomBytes } from "crypto";
+ import { driverHasHistory } from "./history";
+ 
++/**
++ * Deactivate / reactivate an admin from the People list. Deactivating
++ * now also blocks the login itself (a ban, lifted again on reactivate),
++ * not just the profiles flag, and is_admin() (migration 0021) ignores
++ * inactive admins, so a still-open session can't keep using admin
++ * rights. Refuses to deactivate yourself or the organisation's last
++ * active admin, so nobody can lock their organisation out by accident.
++ */
+ export async function toggleUserActive(userId: string, newActive: boolean) {
++  const back = (kind: "success" | "error", msg: string) =>
++    redirect(`/admin/people?role=admin&${kind}=${encodeURIComponent(msg)}`);
++
+   const supabase = createClient();
+-  await supabase.from("profiles").update({ active: newActive }).eq("id", userId);
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++  if (!user) redirect("/login");
++
++  const { data: caller } = await supabase
++    .from("profiles")
++    .select("role, organisation_id")
++    .eq("id", user!.id)
++    .single();
++  if (caller?.role !== "admin") back("error", "You're not authorised to do that.");
++
++  if (!newActive && userId === user!.id) back("error", "You can't deactivate your own account.");
++
++  const { data: target } = await supabase
++    .from("profiles")
++    .select("role, organisation_id")
++    .eq("id", userId)
++    .single();
++  if (!target || target.organisation_id !== caller!.organisation_id) back("error", "You're not authorised to do that.");
++
++  if (!newActive && target!.role === "admin") {
++    const { count } = await supabase
++      .from("profiles")
++      .select("id", { count: "exact", head: true })
++      .eq("organisation_id", caller!.organisation_id)
++      .eq("role", "admin")
++      .eq("active", true)
++      .neq("id", userId);
++    if (!count) back("error", "That's the last active admin. Add or reactivate another admin first.");
++  }
++
++  const { data: changed, error } = await supabase
++    .from("profiles")
++    .update({ active: newActive })
++    .eq("id", userId)
++    .select("id");
++  if (error || !changed || changed.length === 0) back("error", "Something went wrong saving that change. Please try again.");
++
++  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
++    await createAdminClient().auth.admin.updateUserById(userId, {
++      ban_duration: newActive ? "none" : "87600h",
++    });
++  }
++
+   revalidatePath("/admin/drivers");
+   revalidatePath("/admin/admins");
+   revalidatePath("/admin/people");
++  back("success", newActive ? "Reactivated." : "Deactivated. They can no longer sign in.");
+ }
+ 
+ /**
+diff --git a/app/admin/vehicles/[id]/EditVehicleForm.tsx b/app/admin/vehicles/[id]/EditVehicleForm.tsx
+index 42c6d2b..71b88b6 100644
+--- a/app/admin/vehicles/[id]/EditVehicleForm.tsx
++++ b/app/admin/vehicles/[id]/EditVehicleForm.tsx
+@@ -1,5 +1,6 @@
+ "use client";
+ 
++import { shrinkImageInput } from "@/lib/shrinkImage";
+ import { useFormState, useFormStatus } from "react-dom";
+ import { useState } from "react";
+ import { updateVehicle } from "../actions";
+@@ -41,11 +42,61 @@ export default function EditVehicleForm({ vehicle }: { vehicle: any }) {
+           onChange={(e) => {
+             const file = e.target.files?.[0];
+             if (file) setPreview(URL.createObjectURL(file));
++            void shrinkImageInput(e.currentTarget);
+           }}
+           className="w-full text-xs text-steel file:mr-3 file:rounded-lg file:border-0 file:bg-ink file:px-3 file:py-2 file:text-xs file:font-semibold file:text-paper"
+         />
+       </div>
+ 
++      <div className="grid grid-cols-2 gap-3">
++        <div>
++          <label htmlFor="name" className="mb-1 block text-xs font-medium text-steel">
++            Name
++          </label>
++          <input
++            id="name"
++            name="name"
++            defaultValue={vehicle.name}
++            required
++            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
++          />
++        </div>
++        <div>
++          <label htmlFor="registration" className="mb-1 block text-xs font-medium text-steel">
++            Registration
++          </label>
++          <input
++            id="registration"
++            name="registration"
++            defaultValue={vehicle.registration}
++            required
++            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
++          />
++        </div>
++        <div>
++          <label htmlFor="make" className="mb-1 block text-xs font-medium text-steel">
++            Make
++          </label>
++          <input
++            id="make"
++            name="make"
++            defaultValue={vehicle.make ?? ""}
++            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
++          />
++        </div>
++        <div>
++          <label htmlFor="model" className="mb-1 block text-xs font-medium text-steel">
++            Model
++          </label>
++          <input
++            id="model"
++            name="model"
++            defaultValue={vehicle.model ?? ""}
++            className="w-full rounded-lg border border-steel/30 px-3 py-2 text-sm"
++          />
++        </div>
++      </div>
++
+       <div>
+         <label htmlFor="currentOdometer" className="mb-1 block text-xs font-medium text-steel">
+           Current odometer (KM)
+diff --git a/app/admin/vehicles/actions.ts b/app/admin/vehicles/actions.ts
+index ba5c529..158c788 100644
+--- a/app/admin/vehicles/actions.ts
++++ b/app/admin/vehicles/actions.ts
+@@ -55,6 +55,14 @@ export async function createVehicle(prevState: ActionState, formData: FormData):
+ export async function updateVehicle(vehicleId: string, prevState: ActionState, formData: FormData): Promise<ActionState> {
+   const supabase = createClient();
+ 
++  const name = (formData.get("name") as string | null)?.trim();
++  const registration = (formData.get("registration") as string | null)?.trim();
++  const make = (formData.get("make") as string | null)?.trim() || null;
++  const model = (formData.get("model") as string | null)?.trim() || null;
++  if (name === "" || registration === "") {
++    return { error: "Name and registration can't be empty." };
++  }
++
+   const wofDue = (formData.get("wofDue") as string) || null;
+   const regoDue = (formData.get("regoDue") as string) || null;
+   const rucRaw = formData.get("ruc") as string;
+@@ -72,8 +80,8 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
+     if (!photo.type.startsWith("image/")) {
+       return { error: "Please upload an image file for the vehicle photo." };
+     }
+-    if (photo.size > 5 * 1024 * 1024) {
+-      return { error: "Photo is too large — please use an image under 5MB." };
++    if (photo.size > 4 * 1024 * 1024) {
++      return { error: "Photo is too large. Please use an image under 4MB." };
+     }
+ 
+     const ext = photo.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+@@ -90,9 +98,13 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
+     photoUrl = supabase.storage.from("vehicle-photos").getPublicUrl(path).data.publicUrl;
+   }
+ 
+-  const { error } = await supabase
++  const { data: saved, error } = await supabase
+     .from("vehicles")
+     .update({
++      ...(name ? { name } : {}),
++      ...(registration ? { registration } : {}),
++      ...(formData.has("make") ? { make } : {}),
++      ...(formData.has("model") ? { model } : {}),
+       wof_due: wofDue,
+       rego_due: regoDue,
+       ruc_purchased_to_km: rucRaw ? Number(rucRaw) : null,
+@@ -105,9 +117,10 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
+       ...(photoUrl ? { photo_url: photoUrl } : {}),
+       updated_at: new Date().toISOString(),
+     })
+-    .eq("id", vehicleId);
++    .eq("id", vehicleId)
++    .select("id");
+ 
+-  if (error) {
++  if (error || !saved || saved.length === 0) {
+     return { error: "Something went wrong saving these changes. Please try again." };
+   }
+ 
+diff --git a/app/login/LoginForm.tsx b/app/login/LoginForm.tsx
+index bc5992b..ff9a199 100644
+--- a/app/login/LoginForm.tsx
++++ b/app/login/LoginForm.tsx
+@@ -4,7 +4,7 @@ import { useState } from "react";
+ import { useSearchParams } from "next/navigation";
+ import { createClient } from "@/lib/supabase/client";
+ 
+-export default function LoginForm() {
++export default function LoginForm({ next = null }: { next?: string | null }) {
+   const searchParams = useSearchParams();
+   const justSetUp = searchParams.get("setup") === "success";
+   const serverError = searchParams.get("error") === "server";
+@@ -38,7 +38,11 @@ export default function LoginForm() {
+     // rendered the destination on the server twice back to back, which is
+     // a big part of why admin sign-in felt slow. A single hard navigation
+     // also guarantees the new session cookies are what the server sees.
+-    window.location.replace(profile?.role === "admin" ? "/admin" : "/");
++    // Back to the page they were trying to open (e.g. a scanned vehicle),
++    // unless it's an admin page and they're a driver.
++    const isAdmin = profile?.role === "admin";
++    const destination = next && (isAdmin || !next.startsWith("/admin")) ? next : isAdmin ? "/admin" : "/";
++    window.location.replace(destination);
+   }
+ 
+   return (
+diff --git a/app/login/page.tsx b/app/login/page.tsx
+index 19f6769..c595e8b 100644
+--- a/app/login/page.tsx
++++ b/app/login/page.tsx
+@@ -1,4 +1,5 @@
+ import LoginForm from "./LoginForm";
++import { cookies } from "next/headers";
+ 
+ // LoginForm needs the Supabase env vars at render time. Forcing this route
+ // dynamic stops Next.js from trying to prerender it during `next build`
+@@ -7,6 +8,17 @@ import LoginForm from "./LoginForm";
+ // required to create a Supabase client!".
+ export const dynamic = "force-dynamic";
+ 
++/** Only same-site paths like "/vehicle/abc" (never "//evil.com" or a full URL). */
++function safeNextPath(raw: string | undefined): string | null {
++  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
++  if (raw === "/" || raw.startsWith("/login")) return null;
++  return raw;
++}
++
+ export default function LoginPage() {
+-  return <LoginForm />;
++  // Set by middleware when a logged-out person opens a protected page
++  // (typically scanning a vehicle's QR code), so they land back on that
++  // exact page after signing in.
++  const next = safeNextPath(cookies().get("redirect_after_login")?.value);
++  return <LoginForm next={next} />;
+ }
+diff --git a/app/setup/actions.ts b/app/setup/actions.ts
+index f779549..cd27bd6 100644
+--- a/app/setup/actions.ts
++++ b/app/setup/actions.ts
+@@ -89,8 +89,12 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
+   });
+ 
+   if (profileError) {
++    // Undo both halves so the same email and org name can simply be tried
++    // again, instead of leaving a login with no profile behind.
++    await adminClient.auth.admin.deleteUser(created.user.id);
++    await adminClient.from("organisations").delete().eq("id", org.id);
+     return {
+-      error: "The account was created, but setting up the admin profile failed. Please contact support.",
++      error: "Something went wrong setting up the admin account. Nothing was saved, so please try again.",
+     };
+   }
+ 
+diff --git a/lib/bookingNotify.ts b/lib/bookingNotify.ts
+new file mode 100644
+index 0000000..6883a54
+--- /dev/null
++++ b/lib/bookingNotify.ts
+@@ -0,0 +1,24 @@
++import type { SupabaseClient } from "@supabase/supabase-js";
++
++/**
++ * Tells the booking's driver about a decision (and pushes it to their
++ * phone via the notifications trigger). Goes through the
++ * notify_booking_driver() database function (migration 0021), which
++ * checks the caller is an admin in the booking's organisation; a direct
++ * insert into notifications is blocked by RLS and silently did nothing.
++ * Never fails the decision itself if the notification can't be sent.
++ */
++export async function notifyDriver(
++  supabase: SupabaseClient,
++  bookingId: string,
++  type: "booking_approved" | "booking_declined" | "booking_override",
++  message: string
++) {
++  const { error } = await supabase.rpc("notify_booking_driver", {
++    p_booking_id: bookingId,
++    p_type: type,
++    p_message: message,
++  });
++  if (error) console.error("notify_booking_driver failed", error.message);
++}
++
+diff --git a/lib/bookingRecurrence.ts b/lib/bookingRecurrence.ts
+index b50a7c9..de5c58e 100644
+--- a/lib/bookingRecurrence.ts
++++ b/lib/bookingRecurrence.ts
+@@ -18,35 +18,41 @@ export function dayLabel(day: number, short = false) {
+  * startDateIso, matching the given pattern. Deterministic and pure, so the
+  * driver's preview and the server's authoritative creation always agree.
+  */
++// All date maths below is done on pure calendar dates in UTC, so the
++// result is the same in the driver's browser (NZ) and on the server (UTC).
++function utcDate(iso: string): Date {
++  return new Date(`${iso}T00:00:00Z`);
++}
++
+ export function generateOccurrenceDates(startDateIso: string, pattern: RecurrencePattern): string[] {
+   if (pattern.mode === "monthly") {
+     return generateMonthlyOccurrenceDates(startDateIso, pattern);
+   }
+ 
+-  const start = new Date(`${startDateIso}T00:00:00`);
++  const start = utcDate(startDateIso);
+   const results: string[] = [];
+   const SAFETY_CAP_DAYS = 400; // ~13 months of daily scanning, well past any sane request
+ 
+   const weekAnchor = new Date(start);
+-  weekAnchor.setDate(weekAnchor.getDate() - weekAnchor.getDay());
++  weekAnchor.setUTCDate(weekAnchor.getUTCDate() - weekAnchor.getUTCDay());
+ 
+   let endDate: Date | null = null;
+   let maxOccurrences: number | null = null;
+ 
+   if (pattern.endType === "date") {
+-    endDate = new Date(`${pattern.endValue}T23:59:59`);
++    endDate = utcDate(String(pattern.endValue));
+   } else if (pattern.endType === "occurrences") {
+     maxOccurrences = Number(pattern.endValue);
+   } else if (pattern.endType === "weeks") {
+     endDate = new Date(start);
+-    endDate.setDate(endDate.getDate() + Number(pattern.endValue) * 7 - 1);
++    endDate.setUTCDate(endDate.getUTCDate() + Number(pattern.endValue) * 7 - 1);
+   }
+ 
+   for (let i = 0; i < SAFETY_CAP_DAYS; i++) {
+     const d = new Date(start);
+-    d.setDate(start.getDate() + i);
++    d.setUTCDate(start.getUTCDate() + i);
+     if (endDate && d > endDate) break;
+-    if (!pattern.days.includes(d.getDay())) continue;
++    if (!pattern.days.includes(d.getUTCDay())) continue;
+ 
+     const weeksSinceAnchor = Math.floor((d.getTime() - weekAnchor.getTime()) / (7 * 86400000));
+     if (weeksSinceAnchor % pattern.intervalWeeks !== 0) continue;
+@@ -64,22 +70,22 @@ export function generateOccurrenceDates(startDateIso: string, pattern: Recurrenc
+  * that month is skipped rather than silently rolling into the next month.
+  */
+ function generateMonthlyOccurrenceDates(startDateIso: string, pattern: RecurrencePattern): string[] {
+-  const start = new Date(`${startDateIso}T00:00:00`);
+-  const dayOfMonth = start.getDate();
++  const start = utcDate(startDateIso);
++  const dayOfMonth = start.getUTCDate();
+   const results: string[] = [];
+ 
+   let endDate: Date | null = null;
+   let maxOccurrences: number | null = null;
+   if (pattern.endType === "date") {
+-    endDate = new Date(`${pattern.endValue}T23:59:59`);
++    endDate = utcDate(String(pattern.endValue));
+   } else if (pattern.endType === "occurrences") {
+     maxOccurrences = Number(pattern.endValue);
+   }
+ 
+   const SAFETY_CAP_MONTHS = 36;
+   for (let i = 0; i < SAFETY_CAP_MONTHS; i++) {
+-    const candidate = new Date(start.getFullYear(), start.getMonth() + i, dayOfMonth);
+-    if (candidate.getDate() !== dayOfMonth) continue; // that month is too short — skip it
++    const candidate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, dayOfMonth));
++    if (candidate.getUTCDate() !== dayOfMonth) continue; // that month is too short — skip it
+     if (endDate && candidate > endDate) break;
+ 
+     results.push(candidate.toISOString().slice(0, 10));
+diff --git a/lib/nz-time.ts b/lib/nz-time.ts
+index ed34499..6e53f92 100644
+--- a/lib/nz-time.ts
++++ b/lib/nz-time.ts
+@@ -51,22 +51,91 @@ function nzDateParts(date: Date) {
+ 
+ const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+ 
+-/** Midnight (NZ time) of the Monday starting the week containing `date`. */
+-export function startOfWeekNZ(date: Date = new Date()) {
++/**
++ * Offset (ms) of NZ local time from UTC at a given instant: +13h in
++ * summer (NZDT), +12h in winter (NZST).
++ */
++function nzOffsetMs(instant: Date): number {
++  const parts = new Intl.DateTimeFormat("en-NZ", {
++    timeZone: NZ_TZ,
++    year: "numeric",
++    month: "2-digit",
++    day: "2-digit",
++    hour: "2-digit",
++    minute: "2-digit",
++    second: "2-digit",
++    hourCycle: "h23",
++  }).formatToParts(instant);
++  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
++  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
++  return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
++}
++
++/**
++ * The real instant for a wall-clock date + time typed in NZ, e.g.
++ * nzLocalToDate("2026-10-12", "09:00") is 9am in Auckland, whatever
++ * timezone the server or browser runs in. Vercel runs in UTC, so
++ * `new Date("2026-10-12T09:00")` there means 9am UTC (10pm NZ) — never
++ * parse a form's date/time that way.
++ */
++export function nzLocalToDate(date: string, time = "00:00"): Date {
++  const [y, m, d] = date.split("-").map(Number);
++  const [hh, mm] = time.split(":").map(Number);
++  const wall = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
++  let instant = new Date(wall - nzOffsetMs(new Date(wall)));
++  // Second pass settles the hour either side of a daylight-saving change.
++  instant = new Date(wall - nzOffsetMs(instant));
++  return instant;
++}
++
++/** YYYY-MM-DD plus a whole number of days (calendar arithmetic, no timezone). */
++export function addDaysToDateString(date: string, days: number): string {
++  const [y, m, d] = date.split("-").map(Number);
++  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
++}
++
++/** ISO bounds for an inclusive NZ date range: [start 00:00 NZ, day after end 00:00 NZ). */
++export function nzRangeIso(start: string, end: string): { fromIso: string; toIso: string } {
++  return {
++    fromIso: nzLocalToDate(start).toISOString(),
++    toIso: nzLocalToDate(addDaysToDateString(end, 1)).toISOString(),
++  };
++}
++
++/** YYYY-MM-DD of the Monday starting the NZ week containing `date`. */
++export function startOfWeekNZDateString(date: Date = new Date()): string {
+   const { year, month, day, weekday } = nzDateParts(date);
+   const dayIndex = WEEKDAY_INDEX[weekday!] ?? 1;
+   const diff = dayIndex === 0 ? -6 : 1 - dayIndex;
+-  // Construct as a UTC instant representing that NZ calendar date at midnight,
+-  // then let display formatting handle the actual NZ offset.
+-  const base = new Date(Date.UTC(year, month - 1, day));
+-  base.setUTCDate(base.getUTCDate() + diff);
+-  return base;
++  return new Date(Date.UTC(year, month - 1, day + diff)).toISOString().slice(0, 10);
++}
++
++/** Midnight (NZ time) of the Monday starting the week containing `date`, as a real instant. */
++export function startOfWeekNZ(date: Date = new Date()) {
++  return nzLocalToDate(startOfWeekNZDateString(date));
+ }
+ 
+-/** Midnight (NZ time) of the 1st of the month containing `date`. */
++/** Midnight (NZ time) of the 1st of the month containing `date`, as a real instant. */
+ export function startOfMonthNZ(date: Date = new Date()) {
+   const { year, month } = nzDateParts(date);
+-  return new Date(Date.UTC(year, month - 1, 1));
++  return nzLocalToDate(`${year}-${String(month).padStart(2, "0")}-01`);
++}
++
++/** The NZ calendar date of an instant, as YYYY-MM-DD (for <input type="date">). */
++export function nzDateInputValue(date: string | Date): string {
++  return nzDateString(new Date(date));
++}
++
++/** The NZ wall-clock time of an instant, as HH:MM (for <input type="time">). */
++export function nzTimeInputValue(date: string | Date): string {
++  const parts = new Intl.DateTimeFormat("en-NZ", {
++    timeZone: NZ_TZ,
++    hour: "2-digit",
++    minute: "2-digit",
++    hourCycle: "h23",
++  }).formatToParts(new Date(date));
++  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
++  return `${get("hour")}:${get("minute")}`;
+ }
+ 
+ function nzDateString(date: Date): string {
+diff --git a/lib/shrinkImage.ts b/lib/shrinkImage.ts
+new file mode 100644
+index 0000000..ed951bd
+--- /dev/null
++++ b/lib/shrinkImage.ts
+@@ -0,0 +1,41 @@
++/**
++ * Phone photos are 2 to 5 MB, but a Server Action request is capped
++ * (1 MB by default, raised to 4 MB in next.config.js, and Vercel's hard
++ * limit is 4.5 MB). Every photo upload in the app went over that and
++ * failed. This downsizes the picked image in the browser (longest side
++ * 1600px, JPEG ~80%), usually to 200 to 500 KB, and swaps it into the
++ * same <input type="file"> so the form submits the small copy.
++ *
++ * Browser-only. If anything about it fails (old browser, unreadable
++ * format), the original file is left in place untouched.
++ */
++export async function shrinkImageInput(input: HTMLInputElement, maxDimension = 1600, quality = 0.8): Promise<void> {
++  const file = input.files?.[0];
++  if (!file || !file.type.startsWith("image/") || file.size < 400 * 1024) return;
++
++  try {
++    const bitmap = await createImageBitmap(file);
++    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
++    const width = Math.round(bitmap.width * scale);
++    const height = Math.round(bitmap.height * scale);
++
++    const canvas = document.createElement("canvas");
++    canvas.width = width;
++    canvas.height = height;
++    const ctx = canvas.getContext("2d");
++    if (!ctx) return;
++    ctx.drawImage(bitmap, 0, 0, width, height);
++    bitmap.close?.();
++
++    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
++    if (!blob || blob.size >= file.size) return;
++
++    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
++    const small = new File([blob], name, { type: "image/jpeg", lastModified: Date.now() });
++    const transfer = new DataTransfer();
++    transfer.items.add(small);
++    input.files = transfer.files;
++  } catch {
++    // Keep the original file.
++  }
++}
+diff --git a/middleware.ts b/middleware.ts
+index 0b890b9..580466e 100644
+--- a/middleware.ts
++++ b/middleware.ts
+@@ -143,6 +143,13 @@ export async function middleware(request: NextRequest) {
+     }
+   }
+ 
++  // Signed in and past every check: the saved "where they were headed"
++  // path (see above) has done its job, so clear it rather than letting a
++  // stale one hijack some later sign-in.
++  if (user && request.cookies.get("redirect_after_login")) {
++    response.cookies.set("redirect_after_login", "", { maxAge: 0, path: "/" });
++  }
++
+   return response;
+ }
+ 
+diff --git a/next.config.js b/next.config.js
+index d2064a4..a8cca51 100644
+--- a/next.config.js
++++ b/next.config.js
+@@ -11,6 +11,13 @@ const nextConfig = {
+     staleTimes: {
+       dynamic: 30,
+     },
++    // Photos are shrunk in the browser first (lib/shrinkImage.ts), so a
++    // normal upload is well under this. 4 MB is the backstop (Vercel's
++    // own hard limit is 4.5 MB); the 1 MB default rejected every
++    // full-size phone photo outright.
++    serverActions: {
++      bodySizeLimit: "4mb",
++    },
+   },
+ };
+ 
+diff --git a/supabase/migrations/0021_audit_fixes.sql b/supabase/migrations/0021_audit_fixes.sql
+new file mode 100644
+index 0000000..e8f9697
+--- /dev/null
++++ b/supabase/migrations/0021_audit_fixes.sql
+@@ -0,0 +1,329 @@
++-- Fleet Tracker: fixes from the 2026-10-10 full function audit
++-- Run after 0020_is_admin_security_definer.sql, in the Supabase SQL Editor.
++-- Safe to run any number of times. Rollback notes at the bottom.
++--
++-- What this fixes (numbers match claude/full-function-audit-2026-10-10.md):
++--  #1  Ending a trip failed when a vehicle had a compliance alert due:
++--      check_vehicle_alerts() inserted notifications without
++--      organisation_id (NOT NULL since 0013) and alerted every org's admins.
++--      Also restores the daily per-vehicle sweep (0013 had overwritten
++--      check_maintenance_due() with the older WOF/rego-only version).
++--  #2  A driver finishing a trip never updated vehicles.current_odometer:
++--      the trigger ran with the driver's permissions, and drivers can't
++--      update vehicles. Now SECURITY DEFINER, and admin-closed
++--      ("corrected") sessions update it too (#11).
++--  #3  The booking lock never saw other drivers' bookings (RLS). Trigger is
++--      now SECURITY DEFINER, plus a read-only RPC the vehicle page uses to
++--      show "Vehicle Reserved".
++--  #6  A driver editing an approved booking failed: the resubmit
++--      notification had no organisation_id.
++--  #7  fuel_logs had no organisation_id and unscoped admin policies; two
++--      unscoped 0003 booking policies were never dropped.
++--  #8  Drivers never received approve/decline/override notifications
++--      (no INSERT policy on notifications). New admin-checked RPC.
++--  #13 is_admin() now also requires the admin to be active.
++
++-- ============================================================
++-- 1. is_admin(): active admins only (#13)
++-- ============================================================
++create or replace function is_admin()
++returns boolean as $$
++  select coalesce((select role = 'admin' and active from profiles where id = auth.uid()), false);
++$$ language sql stable security definer set search_path = public;
++
++-- ============================================================
++-- 2. Trip triggers run as the table owner (#2, #3)
++-- ============================================================
++create or replace function check_odometer_consistency()
++returns trigger as $$
++declare
++  last_km numeric;
++  vehicle_org uuid;
++begin
++  select current_odometer, organisation_id into last_km, vehicle_org from vehicles where id = new.vehicle_id;
++  -- Runs before the organisation_id stamping trigger, hence the coalesce.
++  if last_km is null or vehicle_org is distinct from coalesce(new.organisation_id, current_org_id()) then
++    raise exception 'That vehicle could not be found.';
++  end if;
++  if new.start_km < last_km then
++    raise exception 'Starting KM (%) is below the vehicle''s last recorded odometer (%)', new.start_km, last_km;
++  end if;
++  return new;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++create or replace function update_vehicle_odometer()
++returns trigger as $$
++begin
++  if new.status in ('completed', 'corrected')
++     and new.end_km is not null
++     and (old.status is distinct from new.status or old.end_km is distinct from new.end_km) then
++    -- greatest(): an older trip closed late never winds the odometer back.
++    update vehicles
++       set current_odometer = greatest(current_odometer, new.end_km), updated_at = now()
++     where id = new.vehicle_id;
++    perform check_vehicle_alerts(new.vehicle_id);
++  end if;
++  return new;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++create or replace function check_booking_lock()
++returns trigger as $$
++declare
++  conflicting_driver uuid;
++  conflicting_end timestamptz;
++begin
++  select driver_id, end_datetime into conflicting_driver, conflicting_end
++  from bookings
++  where vehicle_id = new.vehicle_id
++    and approval_status = 'approved'
++    and booking_status in ('upcoming', 'active')
++    and driver_id <> new.driver_id
++    and start_datetime <= now()
++    and end_datetime >= now()
++  limit 1;
++
++  if conflicting_driver is not null then
++    raise exception 'This vehicle is booked by another driver until %',
++      to_char(conflicting_end at time zone 'Pacific/Auckland', 'HH12:MI am, DD Mon');
++  end if;
++  return new;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++-- Read-only: the approved booking covering this vehicle right now, if any.
++-- Lets a driver's vehicle page see someone else's reservation (name, end
++-- time) without opening up the bookings table itself. Same-org only.
++create or replace function current_vehicle_reservation(p_vehicle_id uuid)
++returns table (id uuid, driver_id uuid, driver_name text, end_datetime timestamptz) as $$
++  select b.id, b.driver_id, p.name, b.end_datetime
++  from bookings b
++  join vehicles v on v.id = b.vehicle_id
++  left join profiles p on p.id = b.driver_id
++  where b.vehicle_id = p_vehicle_id
++    and v.organisation_id = current_org_id()
++    and b.approval_status = 'approved'
++    and b.booking_status in ('upcoming', 'active')
++    and b.start_datetime <= now()
++    and b.end_datetime >= now()
++  order by b.start_datetime
++  limit 1;
++$$ language sql stable security definer set search_path = public;
++
++revoke all on function current_vehicle_reservation(uuid) from public;
++grant execute on function current_vehicle_reservation(uuid) to authenticated;
++
++-- ============================================================
++-- 3. Compliance alerts: org-scoped, organisation_id set (#1)
++-- ============================================================
++create or replace function notify_vehicle_admins(p_vehicle_id uuid, p_org uuid, p_message text, p_key text)
++returns void as $$
++  insert into notifications (recipient_id, type, message, related_table, related_id, dedupe_key, organisation_id)
++  select p.id, 'maintenance_due', p_message, 'vehicles', p_vehicle_id, p_key, p_org
++  from profiles p
++  where p.role = 'admin' and p.active = true and p.organisation_id = p_org
++    and not exists (
++      select 1 from notifications n where n.recipient_id = p.id and n.dedupe_key = p_key
++    );
++$$ language sql security definer set search_path = public;
++
++revoke all on function notify_vehicle_admins(uuid, uuid, text, text) from public, anon, authenticated;
++
++create or replace function check_vehicle_alerts(v_id uuid)
++returns void as $$
++declare
++  v vehicles%rowtype;
++  d int;
++  km numeric;
++begin
++  select * into v from vehicles where id = v_id and active = true;
++  if not found then return; end if;
++
++  -- WOF
++  if v.wof_due is not null then
++    d := v.wof_due - current_date;
++    if d <= 0 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': WOF EXPIRED', 'wof:' || v.wof_due || ':expired');
++    elsif d <= 7 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': WOF expires in ' || d || ' days (Urgent)', 'wof:' || v.wof_due || ':7');
++    elsif d <= 14 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': WOF expires in ' || d || ' days (Due Soon)', 'wof:' || v.wof_due || ':14');
++    elsif d <= 30 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': WOF expires in ' || d || ' days (Upcoming)', 'wof:' || v.wof_due || ':30');
++    end if;
++  end if;
++
++  -- Registration
++  if v.rego_due is not null then
++    d := v.rego_due - current_date;
++    if d <= 0 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': REGO EXPIRED', 'rego:' || v.rego_due || ':expired');
++    elsif d <= 7 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Registration expires in ' || d || ' days (Urgent)', 'rego:' || v.rego_due || ':7');
++    elsif d <= 14 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Registration expires in ' || d || ' days (Due Soon)', 'rego:' || v.rego_due || ':14');
++    elsif d <= 30 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Registration expires in ' || d || ' days (Upcoming)', 'rego:' || v.rego_due || ':30');
++    end if;
++  end if;
++
++  -- RUC
++  if v.ruc_purchased_to_km is not null then
++    km := v.ruc_purchased_to_km - v.current_odometer;
++    if km <= 0 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': RUC OVERDUE (' || v.current_odometer || ' / ' || v.ruc_purchased_to_km || ' KM)', 'ruc:' || v.ruc_purchased_to_km || ':overdue');
++    elsif km <= 200 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': RUC has ' || km || ' KM remaining (Urgent)', 'ruc:' || v.ruc_purchased_to_km || ':200');
++    elsif km <= 500 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': RUC has ' || km || ' KM remaining (Due Soon)', 'ruc:' || v.ruc_purchased_to_km || ':500');
++    elsif km <= 1000 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': RUC has ' || km || ' KM remaining (Upcoming)', 'ruc:' || v.ruc_purchased_to_km || ':1000');
++    end if;
++  end if;
++
++  -- Service by KM
++  if v.service_due_km is not null then
++    km := v.service_due_km - v.current_odometer;
++    if km <= 0 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service OVERDUE (' || v.current_odometer || ' / ' || v.service_due_km || ' KM)', 'service_km:' || v.service_due_km || ':overdue');
++    elsif km <= 200 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || km || ' KM (Urgent)', 'service_km:' || v.service_due_km || ':200');
++    elsif km <= 500 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || km || ' KM (Due Soon)', 'service_km:' || v.service_due_km || ':500');
++    elsif km <= 1000 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || km || ' KM (Upcoming)', 'service_km:' || v.service_due_km || ':1000');
++    end if;
++  end if;
++
++  -- Service by date
++  if v.service_due_date is not null then
++    d := v.service_due_date - current_date;
++    if d <= 0 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service OVERDUE (was due ' || to_char(v.service_due_date, 'DD Mon YYYY') || ')', 'service_date:' || v.service_due_date || ':overdue');
++    elsif d <= 7 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || d || ' days (Urgent)', 'service_date:' || v.service_due_date || ':7');
++    elsif d <= 14 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || d || ' days (Due Soon)', 'service_date:' || v.service_due_date || ':14');
++    elsif d <= 30 then perform notify_vehicle_admins(v.id, v.organisation_id, v.name || ': Service due in ' || d || ' days (Upcoming)', 'service_date:' || v.service_due_date || ':30');
++    end if;
++  end if;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++-- Daily sweep (already scheduled by pg_cron in 0002 under this name).
++create or replace function check_maintenance_due()
++returns void as $$
++declare
++  r record;
++begin
++  for r in select id from vehicles where active = true loop
++    perform check_vehicle_alerts(r.id);
++  end loop;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++-- ============================================================
++-- 4. Booking resubmit notification sets organisation_id (#6)
++-- ============================================================
++create or replace function notify_approving_admin_on_resubmit()
++returns trigger as $$
++begin
++  if old.approval_status = 'approved' and new.approval_status = 'pending' and new.approving_admin_id is not null then
++    insert into notifications (recipient_id, type, message, related_table, related_id, organisation_id)
++    values (
++      new.approving_admin_id,
++      'booking_created',
++      coalesce((select name from profiles where id = new.driver_id), 'A driver') || ' changed and resubmitted: ' ||
++      coalesce(new.title, 'Booking') || ' (needs re-approval)',
++      'bookings',
++      new.id,
++      new.organisation_id
++    );
++  end if;
++  return new;
++end;
++$$ language plpgsql security definer set search_path = public;
++
++-- ============================================================
++-- 5. Driver notifications for booking decisions (#8)
++--    Admin-only, same-org only. The app calls this instead of inserting
++--    into notifications directly (which RLS has never allowed).
++-- ============================================================
++create or replace function notify_booking_driver(p_booking_id uuid, p_type text, p_message text)
++returns void as $$
++declare
++  b bookings%rowtype;
++begin
++  if not is_admin() then
++    raise exception 'Only an admin can send booking notifications.';
++  end if;
++  if p_type not in ('booking_approved', 'booking_declined', 'booking_override') then
++    raise exception 'Unsupported notification type %', p_type;
++  end if;
++
++  select * into b from bookings where id = p_booking_id and organisation_id = current_org_id();
++  if not found then
++    return;
++  end if;
++
++  insert into notifications (recipient_id, type, message, related_table, related_id, organisation_id)
++  values (b.driver_id, p_type, left(p_message, 500), 'bookings', b.id, b.organisation_id);
++end;
++$$ language plpgsql security definer set search_path = public;
++
++revoke all on function notify_booking_driver(uuid, text, text) from public, anon;
++grant execute on function notify_booking_driver(uuid, text, text) to authenticated;
++
++-- ============================================================
++-- 6. Stale, organisation-blind booking policies from 0003 (#7)
++--    Replaced long ago by drivers_update_own_bookings /
++--    admins_update_bookings (org-scoped in 0013), but never dropped.
++-- ============================================================
++drop policy if exists "Admins can manage any booking" on bookings;
++drop policy if exists "Drivers can cancel their own bookings" on bookings;
++
++-- ============================================================
++-- 7. fuel_logs belongs to an organisation (#7)
++-- ============================================================
++alter table fuel_logs add column if not exists organisation_id uuid references organisations(id);
++
++update fuel_logs f
++   set organisation_id = v.organisation_id
++  from vehicles v
++ where v.id = f.vehicle_id and f.organisation_id is null;
++
++alter table fuel_logs alter column organisation_id set not null;
++
++create index if not exists fuel_logs_organisation_id_idx on fuel_logs (organisation_id);
++
++drop trigger if exists trg_set_org_fuel_logs on fuel_logs;
++create trigger trg_set_org_fuel_logs before insert on fuel_logs
++  for each row execute function set_organisation_id();
++
++drop policy if exists drivers_insert_own_fuel_logs on fuel_logs;
++create policy drivers_insert_own_fuel_logs on fuel_logs
++  for insert with check (driver_id = auth.uid() and organisation_id = current_org_id());
++
++drop policy if exists drivers_select_own_fuel_logs on fuel_logs;
++create policy drivers_select_own_fuel_logs on fuel_logs
++  for select using (driver_id = auth.uid() and organisation_id = current_org_id());
++
++drop policy if exists admins_select_all_fuel_logs on fuel_logs;
++create policy admins_select_all_fuel_logs on fuel_logs
++  for select using (is_admin() and organisation_id = current_org_id());
++
++drop policy if exists admins_update_fuel_logs on fuel_logs;
++create policy admins_update_fuel_logs on fuel_logs
++  for update using (is_admin() and organisation_id = current_org_id())
++  with check (is_admin() and organisation_id = current_org_id());
++
++drop policy if exists admins_delete_fuel_logs on fuel_logs;
++create policy admins_delete_fuel_logs on fuel_logs
++  for delete using (is_admin() and organisation_id = current_org_id());
++
++-- ============================================================
++-- 8. Catch up: odometers that fell behind because of #2
++-- ============================================================
++update vehicles v
++   set current_odometer = t.max_end, updated_at = now()
++  from (
++    select vehicle_id, max(end_km) as max_end
++    from vehicle_usage
++    where status in ('completed', 'corrected') and end_km is not null
++    group by vehicle_id
++  ) t
++ where t.vehicle_id = v.id and t.max_end > v.current_odometer;
++
++-- ============================================================
++-- Rollback notes (manual):
++--  - Functions: re-run their previous definitions from 0001/0005/0008/
++--    0009/0013/0020 (behaviour reverts to the buggy versions).
++--  - drop function current_vehicle_reservation(uuid);
++--    drop function notify_booking_driver(uuid, text, text);
++--    drop function notify_vehicle_admins(uuid, uuid, text, text);
++--  - fuel_logs.organisation_id can stay; dropping it requires restoring
++--    the 0018 policies first.
++--  - The two dropped 0003 booking policies should NOT be restored.
++-- ============================================================
+-- 
+2.34.1
+

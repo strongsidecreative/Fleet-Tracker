@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { setupOrganisation } from "./actions";
 
@@ -18,6 +19,25 @@ function SubmitButton() {
 
 export default function SetupForm({ token }: { token?: string }) {
   const [state, formAction] = useFormState(setupOrganisation, { error: null });
+
+  // Organisation created: full-page load into the Admin Guide (see
+  // setupOrganisation for why this isn't a server-side redirect).
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
+
+  if (state.redirectTo) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+        <p className="text-center text-sm text-ink">
+          Organisation created. Taking you to your setup guide…{" "}
+          <a href={state.redirectTo} className="font-semibold text-brand underline">
+            Open the guide
+          </a>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper px-4">

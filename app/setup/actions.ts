@@ -1,10 +1,20 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-type ActionState = { error: string | null };
+type ActionState = { error: string | null; redirectTo?: string };
+
+/**
+ * Where a brand-new organisation admin goes once setup succeeds: the Admin
+ * Guide (benefits, getting started, install steps, a way to sign in).
+ * NEXT_PUBLIC_GUIDE_URL lets the guide live on its own domain (e.g.
+ * https://guide.example.com); unset, it is the /guide pages on this app.
+ */
+function adminGuideUrl() {
+  const base = (process.env.NEXT_PUBLIC_GUIDE_URL || "/guide").replace(/\/+$/, "");
+  return `${base}/admin?setup=success`;
+}
 
 /**
  * Creates a brand new organisation and its first admin account. Unlike the
@@ -99,11 +109,14 @@ export async function setupOrganisation(prevState: ActionState, formData: FormDa
   }
 
   // Straight to the Admin Guide (benefits + install steps + a way to sign
-  // in) rather than the bare login page — the new admin hasn't installed
-  // the app or seen what it does yet, so dropping them at a login form
-  // with nothing else is a dead end.
-  // Clears every cached screen (next.config.js staleTimes) so no tab
-  // shows the old trip/check state for the next 30s.
+  // in) rather than the bare login page: the new admin hasn't installed
+  // the app or seen what it does yet, so a login form alone is a dead end.
+  //
+  // Returned to the form, which does a full-page navigation, instead of
+  // redirect(): the guide pages are plain route handlers (static HTML, not
+  // React pages), and a Server Action redirect() tries a client-side
+  // router transition into them, which doesn't reliably land. A full-page
+  // load always does, and also works if the guide is on another domain.
   revalidatePath("/", "layout");
-  redirect("/guide/admin?setup=success");
+  return { error: null, redirectTo: adminGuideUrl() };
 }

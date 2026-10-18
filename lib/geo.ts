@@ -1,7 +1,7 @@
 /**
  * Trip start/finish locations (migration 0024). SERVER-ONLY helpers.
  * The phone sends lat/lng/accuracy from the browser's geolocation; the
- * server validates them and looks up a short street/suburb label with
+ * server validates them and looks up a short "street, town" label with
  * OpenStreetMap's free Nominatim service (best effort, 2.5 s timeout:
  * if it's slow or down, the trip still saves with just the coordinates).
  */
@@ -33,10 +33,11 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     if (!res.ok) return null;
     const data = (await res.json()) as { address?: Record<string, string>; display_name?: string };
     const a = data.address ?? {};
+    // "Street, Town": the street (with number when known) and the town or
+    // city. Suburb/village only stands in when there's no town.
     const street = [a.house_number, a.road].filter(Boolean).join(" ");
-    const area = a.suburb || a.neighbourhood || a.village || a.hamlet;
-    const town = a.town || a.city || a.county;
-    const parts = [street, area, town].filter((p, i, arr) => p && arr.indexOf(p) === i);
+    const town = a.town || a.city || a.village || a.suburb || a.hamlet || a.county;
+    const parts = [street, town].filter((p, i, arr) => p && arr.indexOf(p) === i);
     const label = parts.join(", ") || data.display_name || null;
     return label ? label.slice(0, 200) : null;
   } catch {
@@ -61,5 +62,8 @@ export async function tripLocationFrom(formData: FormData): Promise<TripLocation
   const typed = typedPlace(formData);
   if (!loc && !typed) return null;
   if (!loc) return { lat: null, lng: null, accuracy: null, address: typed };
-  return { ...loc, address: typed ?? (await reverseGeocode(loc.lat, loc.lng)) };
+  // The form already looked the street/town up to show the driver
+  // (components/LocationCapture), so reuse that instead of a second lookup.
+  const shown = String(formData.get("gpsAddress") ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || null;
+  return { ...loc, address: typed ?? shown ?? (await reverseGeocode(loc.lat, loc.lng)) };
 }

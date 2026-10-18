@@ -13,6 +13,21 @@ type State = { status: "locating" | "ok" | "unavailable"; lat?: number; lng?: nu
  */
 export default function LocationCapture({ onSettled }: { onSettled?: () => void }) {
   const [state, setState] = useState<State>({ status: "locating" });
+  // Street and town for the fix, looked up after it arrives (doesn't hold
+  // up the submit button). undefined = still looking, null = not found.
+  const [address, setAddress] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (state.status !== "ok" || state.lat == null || state.lng == null) return;
+    let cancelled = false;
+    fetch(`/api/geocode?lat=${state.lat}&lng=${state.lng}`)
+      .then((r) => (r.ok ? r.json() : { address: null }))
+      .then((d: { address?: string | null }) => !cancelled && setAddress(d.address ?? null))
+      .catch(() => !cancelled && setAddress(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [state.status, state.lat, state.lng]);
 
   useEffect(() => {
     let done = false;
@@ -52,7 +67,14 @@ export default function LocationCapture({ onSettled }: { onSettled?: () => void 
           <input type="hidden" name="lat" value={state.lat} />
           <input type="hidden" name="lng" value={state.lng} />
           <input type="hidden" name="accuracy" value={Math.round(state.accuracy ?? 0)} />
-          <p className="text-track">Location recorded (within about {Math.max(5, Math.round(state.accuracy ?? 0))} m).</p>
+          {address && <input type="hidden" name="gpsAddress" value={address} />}
+          <p className="text-track">
+            {address === undefined
+              ? "Finding street and town…"
+              : address
+                ? `📍 ${address}`
+                : "Location recorded (street name not available)."}
+          </p>
         </>
       )}
       {state.status === "locating" && <p className="text-steel">Getting your location…</p>}

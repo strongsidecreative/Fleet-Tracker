@@ -52,6 +52,9 @@ export interface VehicleForAlerts {
   ruc_purchased_to_km: number | null;
   service_due_date: string | null;
   service_due_km: number | null;
+  // Optional so callers that select a column list without these still type-check.
+  wheel_alignment_due_date?: string | null;
+  wheel_alignment_due_km?: number | null;
   current_odometer: number;
 }
 
@@ -104,11 +107,34 @@ export function serviceStatus(v: VehicleForAlerts) {
   return { severity, label, kmRemaining, daysRemaining };
 }
 
+export function wheelAlignmentStatus(v: VehicleForAlerts) {
+  const dueKm = v.wheel_alignment_due_km ?? null;
+  const kmRemaining = dueKm !== null ? dueKm - v.current_odometer : null;
+  const daysRemaining = daysUntil(v.wheel_alignment_due_date ?? null);
+  const severity = worse(severityFromKm(kmRemaining), severityFromDays(daysRemaining));
+  const recorded = kmRemaining !== null || daysRemaining !== null;
+
+  if (!recorded) {
+    return { severity, label: "No wheel alignment info recorded", kmRemaining, daysRemaining, recorded };
+  }
+
+  const parts: string[] = [];
+  if (kmRemaining !== null) parts.push(`${kmRemaining.toLocaleString("en-NZ")} KM`);
+  if (daysRemaining !== null) parts.push(`${daysRemaining}d`);
+  const label =
+    severity === "action_required" ? "Wheel alignment OVERDUE" : `Wheel alignment due: ${parts.join(" / ")} remaining`;
+
+  return { severity, label, kmRemaining, daysRemaining, recorded };
+}
+
 export function overallSeverity(v: VehicleForAlerts): Severity {
-  return [wofStatus(v).severity, regoStatus(v).severity, rucStatus(v).severity, serviceStatus(v).severity].reduce(
-    worse,
-    "ok"
-  );
+  return [
+    wofStatus(v).severity,
+    regoStatus(v).severity,
+    rucStatus(v).severity,
+    serviceStatus(v).severity,
+    wheelAlignmentStatus(v).severity,
+  ].reduce(worse, "ok");
 }
 
 export const SEVERITY_BADGE_CLASS: Record<Severity, string> = {

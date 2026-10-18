@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 export default function ResetPasswordForm() {
   const supabase = createClient();
-  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [linkDead, setLinkDead] = useState<string | null>(null);
   const [password, setPassword] = useState("");
@@ -163,16 +161,20 @@ export default function ResetPasswordForm() {
     // was just invited, that's the first time they've seen what the app
     // does or how to install it. Falls back to /login if the role lookup
     // fails for any reason, so this never leaves someone stuck.
+    // Full-page load, not router.push: the guide pages are static route
+    // handlers, not React pages, so a client-side transition into them
+    // doesn't reliably land.
+    const guideBase = (process.env.NEXT_PUBLIC_GUIDE_URL || "/guide").replace(/\/+$/, "");
     let destination = "/login";
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      if (profile?.role === "admin") destination = "/guide/admin?setup=success";
-      else if (profile?.role === "driver") destination = "/guide/driver?setup=success";
+      if (profile?.role === "admin") destination = `${guideBase}/admin?setup=success`;
+      else if (profile?.role === "driver") destination = `${guideBase}/driver?setup=success`;
     }
-    setTimeout(() => router.push(destination), 1800);
+    setTimeout(() => window.location.assign(destination), 1800);
   }
 
   if (done) {

@@ -17,8 +17,8 @@ export async function GET() {
     ruc_purchased_to_km: v.ruc_purchased_to_km ?? "",
     service_due_date: v.service_due_date ?? "",
     service_due_km: v.service_due_km ?? "",
-    last_service_date: v.last_service_date ?? "",
-    last_service_odometer: v.last_service_odometer ?? "",
+    wheel_alignment_due_date: v.wheel_alignment_due_date ?? "",
+    wheel_alignment_due_km: v.wheel_alignment_due_km ?? "",
   }));
 
   const csv = toCsv(rows, [
@@ -33,8 +33,8 @@ export async function GET() {
     "ruc_purchased_to_km",
     "service_due_date",
     "service_due_km",
-    "last_service_date",
-    "last_service_odometer",
+    "wheel_alignment_due_date",
+    "wheel_alignment_due_km",
   ]);
   return csvResponse(csv, `vehicles-${new Date().toISOString().slice(0, 10)}.csv`);
 }

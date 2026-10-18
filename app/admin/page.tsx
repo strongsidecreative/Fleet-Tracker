@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { overallSeverity, wofStatus, regoStatus, rucStatus, serviceStatus, SEVERITY_BADGE_CLASS, SEVERITY_LABEL } from "@/lib/vehicleAlerts";
+import { overallSeverity, wofStatus, regoStatus, rucStatus, serviceStatus, wheelAlignmentStatus, SEVERITY_BADGE_CLASS, SEVERITY_LABEL } from "@/lib/vehicleAlerts";
 import { startOfWeekNZ, startOfMonthNZ } from "@/lib/nz-time";
 import { monthLabel } from "@/lib/receiptMonths";
 
@@ -214,6 +214,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
                   <span>{regoStatus(v).label}</span>
                   <span>{rucStatus(v).label}</span>
                   <span>{serviceStatus(v).label}</span>
+                  {wheelAlignmentStatus(v).recorded && <span>{wheelAlignmentStatus(v).label}</span>}
                   <span>Odometer: {v.current_odometer.toLocaleString("en-NZ")} KM</span>
                 </div>
               </Link>

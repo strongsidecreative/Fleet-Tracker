@@ -8,29 +8,69 @@ import { PUBLIC_BUCKET, fileExtension, removePhotos } from "@/lib/photos";
 
 type ActionState = { error: string | null };
 
+/**
+ * Reads an optional KM field. Blank -> null; anything that isn't a
+ * whole-ish non-negative number -> an error message naming the field.
+ */
+function readKm(formData: FormData, field: string, label: string): { value: number | null; error?: string } {
+  const raw = ((formData.get(field) as string | null) ?? "").replace(/[,\s]/g, "");
+  if (!raw) return { value: null };
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < 0) return { value: null, error: `${label} must be a valid number.` };
+  return { value: n };
+}
+
+/** The compliance + servicing fields shared by the Add and Edit forms (VehicleComplianceFields). */
+function readComplianceFields(formData: FormData) {
+  const ruc = readKm(formData, "ruc", "RUC purchased-to reading");
+  const serviceKm = readKm(formData, "serviceDueKm", "Next service KM");
+  const wheelKm = readKm(formData, "wheelAlignmentDueKm", "Next wheel alignment KM");
+  const error = ruc.error ?? serviceKm.error ?? wheelKm.error ?? null;
+  return {
+    error,
+    values: {
+      wof_due: (formData.get("wofDue") as string) || null,
+      rego_due: (formData.get("regoDue") as string) || null,
+      ruc_purchased_to_km: ruc.value,
+      service_due_date: (formData.get("serviceDueDate") as string) || null,
+      service_due_km: serviceKm.value,
+      wheel_alignment_due_date: (formData.get("wheelAlignmentDueDate") as string) || null,
+      wheel_alignment_due_km: wheelKm.value,
+    },
+  };
+}
+
+function photoProblem(photo: File | null): string | null {
+  if (!photo || photo.size === 0) return null;
+  if (!photo.type.startsWith("image/")) return "Please upload an image file for the vehicle photo.";
+  if (photo.size > 4 * 1024 * 1024) return "Photo is too large. Please use an image under 4MB.";
+  return null;
+}
+
 export async function createVehicle(prevState: ActionState, formData: FormData): Promise<ActionState> {
   const supabase = createClient();
 
   const name = formData.get("name") as string;
   const registration = formData.get("registration") as string;
-  const make = (formData.get("make") as string) || null;
-  const model = (formData.get("model") as string) || null;
+  const make = ((formData.get("make") as string) || "").trim() || null;
+  const model = ((formData.get("model") as string) || "").trim() || null;
   const odometerRaw = formData.get("odometer") as string;
-  const rucRaw = formData.get("ruc") as string;
+  const photo = formData.get("photo") as File | null;
 
   if (!name?.trim() || !registration?.trim() || !odometerRaw) {
     return { error: "Name, registration, and starting odometer are all required." };
   }
 
-  const odometer = Number(odometerRaw);
+  const odometer = Number(odometerRaw.replace(/[,\s]/g, ""));
   if (Number.isNaN(odometer) || odometer < 0) {
     return { error: "Starting odometer must be a valid number." };
   }
 
-  const ruc = rucRaw ? Number(rucRaw) : null;
-  if (rucRaw && Number.isNaN(ruc as number)) {
-    return { error: "RUC purchased-to reading must be a valid number." };
-  }
+  const compliance = readComplianceFields(formData);
+  if (compliance.error) return { error: compliance.error };
+
+  const badPhoto = photoProblem(photo);
+  if (badPhoto) return { error: badPhoto };
 
   const { data: newVehicle, error } = await supabase
     .from("vehicles")
@@ -40,17 +80,38 @@ export async function createVehicle(prevState: ActionState, formData: FormData):
       make,
       model,
       current_odometer: odometer,
-      ruc_purchased_to_km: ruc,
+      ...compliance.values,
     })
-    .select("id")
+    .select("id, organisation_id")
     .single();
 
   if (error || !newVehicle) {
     return { error: "Something went wrong adding this vehicle. Please try again." };
   }
 
+  // Photo goes up after the insert, because its Storage path needs the
+  // vehicle's id and organisation (migration 0023). A failed upload
+  // doesn't undo the vehicle; the admin can add the photo from Edit.
+  let message = "Vehicle added. Here's its QR code.";
+  if (photo && photo.size > 0) {
+    const path = `vehicles/${newVehicle.organisation_id}/${newVehicle.id}-${Date.now()}.${fileExtension(photo)}`;
+    const { error: uploadError } = await supabase.storage.from(PUBLIC_BUCKET).upload(path, photo, { contentType: photo.type });
+    if (uploadError) {
+      message = "Vehicle added, but the photo didn't upload. You can add it from the vehicle's Edit page. Here's its QR code.";
+    } else {
+      const photoUrl = supabase.storage.from(PUBLIC_BUCKET).getPublicUrl(path).data.publicUrl;
+      await supabase.from("vehicles").update({ photo_url: photoUrl }).eq("id", newVehicle.id);
+    }
+  }
+
+  // Raise any WOF/rego/RUC/service/wheel alignment reminders that are
+  // already due, now rather than at the next daily sweep. Best-effort: the
+  // daily sweep catches it anyway if this call isn't permitted.
+  await supabase.rpc("check_vehicle_alerts", { v_id: newVehicle.id });
+
   revalidatePath("/admin/vehicles");
-  redirect(`/admin/vehicles/${newVehicle.id}/qr?success=${encodeURIComponent("Vehicle added. Here's its QR code.")}`);
+  revalidatePath("/admin");
+  redirect(`/admin/vehicles/${newVehicle.id}/qr?success=${encodeURIComponent(message)}`);
 }
 
 export async function updateVehicle(vehicleId: string, prevState: ActionState, formData: FormData): Promise<ActionState> {
@@ -64,13 +125,8 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
     return { error: "Name and registration can't be empty." };
   }
 
-  const wofDue = (formData.get("wofDue") as string) || null;
-  const regoDue = (formData.get("regoDue") as string) || null;
-  const rucRaw = formData.get("ruc") as string;
-  const serviceDueDate = (formData.get("serviceDueDate") as string) || null;
-  const serviceDueKmRaw = formData.get("serviceDueKm") as string;
-  const lastServiceDate = (formData.get("lastServiceDate") as string) || null;
-  const lastServiceOdometerRaw = formData.get("lastServiceOdometer") as string;
+  const compliance = readComplianceFields(formData);
+  if (compliance.error) return { error: compliance.error };
   const currentOdometerRaw = formData.get("currentOdometer") as string;
   const active = formData.get("active") === "on";
   const photo = formData.get("photo") as File | null;
@@ -79,12 +135,8 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
   let previousPhoto: string | null = null;
 
   if (photo && photo.size > 0) {
-    if (!photo.type.startsWith("image/")) {
-      return { error: "Please upload an image file for the vehicle photo." };
-    }
-    if (photo.size > 4 * 1024 * 1024) {
-      return { error: "Photo is too large. Please use an image under 4MB." };
-    }
+    const badPhoto = photoProblem(photo);
+    if (badPhoto) return { error: badPhoto };
 
     // Organisation folder (migration 0023): Storage only lets an admin
     // upload into, replace or delete photos under their own organisation.
@@ -117,13 +169,7 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
       ...(registration ? { registration } : {}),
       ...(formData.has("make") ? { make } : {}),
       ...(formData.has("model") ? { model } : {}),
-      wof_due: wofDue,
-      rego_due: regoDue,
-      ruc_purchased_to_km: rucRaw ? Number(rucRaw) : null,
-      service_due_date: serviceDueDate,
-      service_due_km: serviceDueKmRaw ? Number(serviceDueKmRaw) : null,
-      last_service_date: lastServiceDate,
-      last_service_odometer: lastServiceOdometerRaw ? Number(lastServiceOdometerRaw) : null,
+      ...compliance.values,
       current_odometer: currentOdometerRaw ? Number(currentOdometerRaw) : undefined,
       active,
       ...(photoUrl ? { photo_url: photoUrl } : {}),
@@ -141,7 +187,12 @@ export async function updateVehicle(vehicleId: string, prevState: ActionState, f
     await removePhotos(createAdminClient(), [previousPhoto]);
   }
 
+  // New or changed due dates/KMs raise their reminders now, not at the
+  // next daily sweep (best-effort, same as createVehicle).
+  await supabase.rpc("check_vehicle_alerts", { v_id: vehicleId });
+
   revalidatePath("/admin/vehicles");
+  revalidatePath("/admin");
   redirect("/admin/vehicles?success=Vehicle updated");
 }
 
